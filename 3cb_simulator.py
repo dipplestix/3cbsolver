@@ -1,209 +1,21 @@
 from __future__ import annotations
+
 from dataclasses import dataclass, field
-from typing import List, Dict, Tuple, Optional, Any
-import itertools, math, hashlib, json
+from typing import Dict, List, Optional, Tuple
 
-COLORS = ["W", "U", "B", "R", "G"]
-ALL_MANA_SYMBOLS = COLORS + ["C"]
+import hashlib
+import itertools
+import json
+import math
 
-def parse_mana_cost(cost: str) -> Dict[str, int]:
-    result = {c: 0 for c in ALL_MANA_SYMBOLS}
-    result["generic"] = 0
-    i = 0
-    while i < len(cost):
-        ch = cost[i]
-        if ch.isdigit():
-            j = i
-            while j < len(cost) and cost[j].isdigit():
-                j += 1
-            result["generic"] += int(cost[i:j])
-            i = j
-        else:
-            if ch in ALL_MANA_SYMBOLS:
-                result[ch] += 1
-                i += 1
-            else:
-                raise ValueError(f"Unsupported mana symbol in cost: {ch}")
-    return result
-
-def can_pay(cost: Dict[str, int], pool: Dict[str, int]) -> bool:
-    for c in COLORS + ["C"]:
-        if pool.get(c, 0) < cost.get(c, 0):
-            return False
-    excess = sum(pool.get(k, 0) - cost.get(k, 0) for k in ALL_MANA_SYMBOLS)
-    return excess >= cost.get("generic", 0)
-
-def pay(cost: Dict[str, int], pool: Dict[str, int]) -> Dict[str, int]:
-    pool = pool.copy()
-    for c in COLORS + ["C"]:
-        need = cost.get(c, 0)
-        if need:
-            assert pool.get(c, 0) >= need
-            pool[c] -= need
-    generic = cost.get("generic", 0)
-    if generic:
-        for k in ["C"] + COLORS:
-            use = min(pool.get(k, 0), generic)
-            pool[k] -= use
-            generic -= use
-            if generic == 0:
-                break
-        assert generic == 0
-    return pool
-
-def empty_pool() -> Dict[str, int]:
-    return {k: 0 for k in ALL_MANA_SYMBOLS}
-
-@dataclass
-class Card:
-    name: str
-    types: Tuple[str, ...]
-    cost_str: str = ""
-    haste: bool = False
-    power: int = 0
-    toughness: int = 0
-
-    def mana_cost(self) -> Dict[str, int]:
-        return parse_mana_cost(self.cost_str) if self.cost_str else {"generic": 0, **{k:0 for k in ALL_MANA_SYMBOLS}}
-
-    def can_play(self, state: "GameState", player: int) -> bool:
-        if self.is_land():
-            return (not state.players[player].land_played_this_turn)
-        else:
-            return can_pay(self.mana_cost(), state.players[player].mana_pool)
-
-    def play(self, state: "GameState", player: int) -> None:
-        if self.is_land():
-            state.players[player].land_played_this_turn = True
-            state.battlefield.append(Permanent(card=self, controller=player))
-            state.players[player].hand.remove(self)
-        elif self.is_creature():
-            state.players[player].mana_pool = pay(self.mana_cost(), state.players[player].mana_pool)
-            perm = Permanent(card=self, controller=player, summoning_sick=(not self.haste))
-            state.battlefield.append(perm)
-            state.players[player].hand.remove(self)
-        else:
-            state.players[player].mana_pool = pay(self.mana_cost(), state.players[player].mana_pool)
-            self.resolve_noncreature(state, player)
-            state.players[player].hand.remove(self)
-            state.players[player].graveyard.append(self)
-
-    def resolve_noncreature(self, state: "GameState", player: int) -> None:
-        pass
-
-    def state_static(self, state: "GameState", me: int) -> None:
-        pass
-
-    def is_land(self) -> bool:
-        return "Land" in self.types
-
-    def is_creature(self) -> bool:
-        return "Creature" in self.types
-
-    def is_artifact(self) -> bool:
-        return "Artifact" in self.types
-
-@dataclass
-class Permanent:
-    card: Card
-    controller: int
-    tapped: bool = False
-    summoning_sick: bool = False
-    damage: int = 0
-
-    def can_attack(self) -> bool:
-        return self.card.is_creature() and (not self.summoning_sick)
-
-class BasicLand(Card):
-    def __init__(self, name: str, color: Optional[str] = None):
-        types = ("Land",)
-        super().__init__(name=name, types=types)
-        self._color = color
-
-    def activate_tap_for_mana(self, state: "GameState", player: int) -> bool:
-        for perm in state.battlefield:
-            if perm.card is self and perm.controller == player and not perm.tapped:
-                perm.tapped = True
-                if self._color:
-                    state.players[player].mana_pool[self._color] += 1
-                else:
-                    state.players[player].mana_pool["C"] += 1
-                return True
-        return False
-
-class BlackLotus(Card):
-    def __init__(self):
-        super().__init__(name="Black Lotus", types=("Artifact",), cost_str="0")
-
-    def can_play(self, state, player):
-        return True
-
-    def play(self, state, player):
-        state.players[player].hand.remove(self)
-        state.battlefield.append(Permanent(card=self, controller=player))
-
-    def sac_for_mana(self, state: "GameState", player: int, color: str) -> bool:
-        for i, perm in enumerate(state.battlefield):
-            if perm.card is self and perm.controller == player:
-                state.battlefield.pop(i)
-                state.players[player].graveyard.append(self)
-                if color not in COLORS:
-                    raise ValueError("Black Lotus can only add colored mana (W/U/B/R/G)")
-                state.players[player].mana_pool[color] += 3
-                return True
-        return False
-
-class LotusPetal(Card):
-    def __init__(self):
-        super().__init__(name="Lotus Petal", types=("Artifact",), cost_str="0")
-
-    def can_play(self, state, player):
-        return True
-
-    def play(self, state, player):
-        state.players[player].hand.remove(self)
-        state.battlefield.append(Permanent(card=self, controller=player))
-
-    def sac_for_mana(self, state: "GameState", player: int, color: str) -> bool:
-        for i, perm in enumerate(state.battlefield):
-            if perm.card is self and perm.controller == player:
-                state.battlefield.pop(i)
-                state.players[player].graveyard.append(self)
-                if color not in ALL_MANA_SYMBOLS:
-                    raise ValueError("Lotus Petal can add W/U/B/R/G/C")
-                state.players[player].mana_pool[color] += 1
-                return True
-        return False
-
-class SimpleCreature(Card):
-    def __init__(self, name: str, cost: str, power: int, toughness: int, haste: bool=False):
-        super().__init__(name=name, types=("Creature",), cost_str=cost, power=power, toughness=toughness, haste=haste)
-
-class LightningBolt(Card):
-    def __init__(self):
-        super().__init__(name="Lightning Bolt", types=("Sorcery",), cost_str="R")
-
-    def resolve_noncreature(self, state: "GameState", player: int) -> None:
-        opponent = 1 - player
-        if state.players[opponent].life <= 3:
-            state.players[opponent].life -= 3
-            return
-        opp_creatures = [p for p in state.battlefield if p.controller == opponent and p.card.is_creature()]
-        if opp_creatures:
-            target = max(opp_creatures, key=lambda p: (p.card.power, p.card.toughness))
-            target.damage += 3
-            if target.damage >= target.card.toughness:
-                state.battlefield.remove(target)
-                state.players[opponent].graveyard.append(target.card)
-        else:
-            state.players[opponent].life -= 3
+from cards import Card, Permanent, empty_pool, make_card
 
 @dataclass
 class PlayerState:
     life: int = 20
     hand: List[Card] = field(default_factory=list)
     graveyard: List[Card] = field(default_factory=list)
-    mana_pool: Dict[str, int] = field(default_factory=lambda: {k:0 for k in ALL_MANA_SYMBOLS})
+    mana_pool: Dict[str, int] = field(default_factory=empty_pool)
     land_played_this_turn: bool = False
 
 @dataclass
@@ -248,13 +60,11 @@ def begin_turn(state: GameState) -> None:
 
 def available_mana_actions(state: GameState, player: int):
     actions = []
-    for perm in state.battlefield:
-        if perm.controller == player and not perm.tapped and isinstance(perm.card, BasicLand):
-            actions.append(("TAP_LAND", perm.card))
-    for perm in state.battlefield:
-        if perm.controller == player and isinstance(perm.card, (BlackLotus, LotusPetal)):
-            for col in ALL_MANA_SYMBOLS if isinstance(perm.card, LotusPetal) else COLORS:
-                actions.append(("SAC_FOR_MANA", (perm.card, col)))
+    for idx, perm in enumerate(state.battlefield):
+        if perm.controller != player:
+            continue
+        for ability in perm.card.activated_abilities(state, player, idx):
+            actions.append(("ACTIVATE_ABILITY", ability))
     return actions
 
 def available_cast_actions(state: GameState, player: int):
@@ -352,14 +162,8 @@ def generate_main_phase_actions(state: GameState, player: int):
 
 def do_action(state: GameState, player: int, action):
     kind, payload = action
-    if kind == "TAP_LAND":
-        payload.activate_tap_for_mana(state, player)
-    elif kind == "SAC_FOR_MANA":
-        card, color = payload
-        if isinstance(card, BlackLotus):
-            card.sac_for_mana(state, player, color)
-        elif isinstance(card, LotusPetal):
-            card.sac_for_mana(state, player, color)
+    if kind == "ACTIVATE_ABILITY":
+        payload.resolve(state, player)
     elif kind == "PLAY_CARD":
         payload.play(state, player)
     elif kind == "PASS_MAIN":
@@ -432,25 +236,6 @@ def minimax(state: GameState, perspective: int, depth: int, alpha: int, beta: in
         end_step_and_pass_turn(st2)
         return minimax(st2, perspective, depth-1, alpha, beta)
     return 0
-
-def make_card(name: str) -> Card:
-    name = name.strip().lower()
-    if name in ["plains", "island", "swamp", "mountain", "forest", "wastes"]:
-        color = {"plains":"W", "island":"U", "swamp":"B", "mountain":"R", "forest":"G", "wastes":None}[name]
-        return BasicLand(name=name.title(), color=color)
-    if name == "black lotus":
-        return BlackLotus()
-    if name == "lotus petal":
-        return LotusPetal()
-    if name == "grizzly bears":
-        return SimpleCreature("Grizzly Bears", cost="1G", power=2, toughness=2)
-    if name == "elite vanguard":
-        return SimpleCreature("Elite Vanguard", cost="W", power=2, toughness=1)
-    if name == "savannah lions":
-        return SimpleCreature("Savannah Lions", cost="W", power=2, toughness=1)
-    if name == "lightning bolt":
-        return LightningBolt()
-    return SimpleCreature(name.title(), cost="2", power=2, toughness=2)
 
 def build_deck(card_names: List[str]) -> List[Card]:
     assert len(card_names) == 3, "3CB decks must have exactly 3 cards"
