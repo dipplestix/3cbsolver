@@ -3,9 +3,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from math import inf
+from pathlib import Path
 from typing import List, Optional, Sequence
 
-from cards import Card, get_card
+if __package__ in (None, ""):
+    import sys
+
+    CURRENT_DIR = Path(__file__).resolve().parent
+    if str(CURRENT_DIR) not in sys.path:
+        sys.path.insert(0, str(CURRENT_DIR))
+    from data.cards import Card, get_card
+else:  # pragma: no cover - package import path
+    from .data.cards import Card, get_card
 
 MAX_CONSECUTIVE_PASSES = 10
 
