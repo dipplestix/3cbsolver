@@ -261,6 +261,7 @@ def setup_duel(attacker_name: str, defender_name: str, life_total: int = 20) -> 
 def main() -> None:
     initial = setup_duel("Shivan Dragon", "Savannah Lions", life_total=20)
     root = build_game_tree(initial)
+    print(root.state.legal_moves())
     score = alpha_beta(root)
     print("Alpha-beta evaluation (player 0 perspective):", score)
 
