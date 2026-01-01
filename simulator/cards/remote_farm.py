@@ -59,7 +59,8 @@ class RemoteFarm(Land):
         actions = []
 
         # T, Remove a depletion counter: Add WW
-        if not self.tapped and self.depletion_counters > 0:
+        # Only offer if there's something in hand to cast (otherwise mana is wasted)
+        if not self.tapped and self.depletion_counters > 0 and state.hands[self.owner]:
             def tap_for_mana(s: 'GameState') -> 'GameState':
                 ns = s.copy()
                 for card in ns.battlefield[self.owner]:
