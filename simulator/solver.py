@@ -299,9 +299,10 @@ def get_available_actions(state: GameState) -> List[Action]:
                 if getattr(card, 'entered_this_turn', False):
                     continue
 
-                # Create a signature for this creature type
+                # Create a signature for this creature type (include eot boosts for pumped creatures)
                 creature_sig = (card.name, getattr(card, 'power', 0), getattr(card, 'toughness', 0),
-                                getattr(card, 'plus_counters', 0), getattr(card, 'level', 0))
+                                getattr(card, 'plus_counters', 0), getattr(card, 'level', 0),
+                                getattr(card, 'eot_power_boost', 0), getattr(card, 'eot_toughness_boost', 0))
                 if creature_sig in seen_attackers:
                     continue  # Skip duplicate creature types
                 seen_attackers.add(creature_sig)
@@ -361,7 +362,8 @@ def get_available_actions(state: GameState) -> List[Action]:
                 continue
 
             blocker_sig = (blocker.name, getattr(blocker, 'power', 0), getattr(blocker, 'toughness', 0),
-                           getattr(blocker, 'plus_counters', 0))
+                           getattr(blocker, 'plus_counters', 0), getattr(blocker, 'level', 0),
+                           getattr(blocker, 'eot_power_boost', 0), getattr(blocker, 'eot_toughness_boost', 0))
 
             for att_idx, attacker in attackers_with_idx:
                 if att_idx in blocked_attackers:
@@ -371,7 +373,9 @@ def get_available_actions(state: GameState) -> List[Action]:
                 if hasattr(blocker, 'can_block') and not blocker.can_block(attacker):
                     continue
 
-                attacker_sig = (attacker.name, getattr(attacker, 'power', 0))
+                attacker_sig = (attacker.name, getattr(attacker, 'power', 0), getattr(attacker, 'toughness', 0),
+                                getattr(attacker, 'plus_counters', 0), getattr(attacker, 'level', 0),
+                                getattr(attacker, 'eot_power_boost', 0), getattr(attacker, 'eot_toughness_boost', 0))
                 block_sig = (blocker_sig, attacker_sig)
 
                 if block_sig in seen_blocks:
