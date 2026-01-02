@@ -132,7 +132,8 @@ def minimax(state: GameState, player: int, memo: Dict = None, depth: int = 0,
     return best_score
 
 
-def solve(p1_hand: List[Card], p2_hand: List[Card], first_player: int = 0) -> Tuple[int, str]:
+def solve(p1_hand: List[Card], p2_hand: List[Card], first_player: int = 0,
+          p1_life: int = 20, p2_life: int = 20) -> Tuple[int, str]:
     """
     Solve a matchup given the starting hands.
 
@@ -140,6 +141,8 @@ def solve(p1_hand: List[Card], p2_hand: List[Card], first_player: int = 0) -> Tu
         p1_hand: Player 1's starting hand (list of Card objects)
         p2_hand: Player 2's starting hand (list of Card objects)
         first_player: Who goes first (0 = P1, 1 = P2)
+        p1_life: Player 1's starting life total (default 20)
+        p2_life: Player 2's starting life total (default 20)
 
     Returns:
         Tuple of (result, description)
@@ -147,7 +150,7 @@ def solve(p1_hand: List[Card], p2_hand: List[Card], first_player: int = 0) -> Tu
         description: Human readable result
     """
     initial_state = GameState(
-        life=[20, 20],
+        life=[p1_life, p2_life],
         hands=[[c.copy() for c in p1_hand], [c.copy() for c in p2_hand]],
         battlefield=[[], []],
         artifacts=[[], []],

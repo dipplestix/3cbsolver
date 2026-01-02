@@ -59,12 +59,13 @@ def timeout_handler(signum, frame):
     raise TimeoutError()
 
 
-def solve_with_timeout(deck1, deck2, first_player, timeout_sec=30):
+def solve_with_timeout(deck1, deck2, first_player, timeout_sec=30, p1_life=20, p2_life=20):
     """Run solver with timeout."""
     signal.signal(signal.SIGALRM, timeout_handler)
     signal.alarm(timeout_sec)
     try:
-        result, desc = solve(deck1, deck2, first_player=first_player)
+        result, desc = solve(deck1, deck2, first_player=first_player,
+                            p1_life=p1_life, p2_life=p2_life)
         signal.alarm(0)
         return result, desc
     except TimeoutError:
@@ -79,6 +80,8 @@ def cmd_solve(args):
 
     print(f"\n{d1_name} vs {d2_name}")
     print(f"First player: {'P1' if args.first == 0 else 'P2'}")
+    if args.p1_life != 20 or args.p2_life != 20:
+        print(f"Starting life: P1={args.p1_life}, P2={args.p2_life}")
     print("-" * 40)
 
     p1_hand = d1_factory(0)
@@ -88,7 +91,9 @@ def cmd_solve(args):
         [c.copy() for c in p1_hand],
         [c.copy() for c in p2_hand],
         first_player=args.first,
-        timeout_sec=args.timeout
+        timeout_sec=args.timeout,
+        p1_life=args.p1_life,
+        p2_life=args.p2_life
     )
 
     if desc is None:
@@ -480,13 +485,15 @@ def cmd_show(args):
     print("=" * 85)
     print(f"{d1_name} vs {d2_name}")
     print(f"First player: {'P1' if args.first == 0 else 'P2'}")
+    if args.p1_life != 20 or args.p2_life != 20:
+        print(f"Starting life: P1={args.p1_life}, P2={args.p2_life}")
     print("=" * 85)
 
     p1_hand = d1_factory(0)
     p2_hand = d2_factory(1)
 
     state = GameState(
-        life=[20, 20],
+        life=[args.p1_life, args.p2_life],
         hands=[[c.copy() for c in p1_hand], [c.copy() for c in p2_hand]],
         battlefield=[[], []],
         artifacts=[[], []],
@@ -499,7 +506,9 @@ def cmd_show(args):
     result, desc = solve(
         [c.copy() for c in p1_hand],
         [c.copy() for c in p2_hand],
-        first_player=args.first
+        first_player=args.first,
+        p1_life=args.p1_life,
+        p2_life=args.p2_life
     )
     print(f"Result: {desc}")
     print()
@@ -827,6 +836,8 @@ Examples:
     p.add_argument("--first", type=int, default=0, choices=[0, 1],
                    help="Who goes first (0=P1, 1=P2)")
     p.add_argument("--timeout", type=int, default=30, help="Solver timeout in seconds")
+    p.add_argument("--p1-life", type=int, default=20, help="P1 starting life (default 20)")
+    p.add_argument("--p2-life", type=int, default=20, help="P2 starting life (default 20)")
 
     # metagame command
     p = subparsers.add_parser("metagame", help="Run metagame table")
@@ -839,6 +850,8 @@ Examples:
     p.add_argument("--first", type=int, default=0, choices=[0, 1],
                    help="Who goes first (0=P1, 1=P2)")
     p.add_argument("--max-depth", type=int, default=200, help="Max turns to show")
+    p.add_argument("--p1-life", type=int, default=20, help="P1 starting life (default 20)")
+    p.add_argument("--p2-life", type=int, default=20, help="P2 starting life (default 20)")
 
     # list command
     subparsers.add_parser("list", help="List available decks")
