@@ -28,6 +28,18 @@ class Land(Card):
         self.card_type = CardType.LAND
         self.entered_this_turn = False
 
+    def get_mana_output(self) -> int:
+        """Basic lands produce 1 mana."""
+        return 1
+
+    def get_signature_state(self) -> tuple:
+        """Return land-specific state for memoization."""
+        return (
+            self.name,
+            self.tapped,
+            self.entered_this_turn,
+        )
+
     def get_play_actions(self, state: 'GameState') -> List[Action]:
         if state.active_player != self.owner:
             return []
@@ -75,36 +87,51 @@ class CreatureLand(Land):
         self.creature_keywords = creature_keywords or []
         self.creature_types = creature_types or []
         self.all_creature_types = all_creature_types  # For Mutavault
-        self.is_creature = False
+        self._is_creature = False
         self.damage = 0
         self.attacking = False
 
+    def is_creature(self) -> bool:
+        """CreatureLand is a creature only when activated."""
+        return self._is_creature
+
+    def get_signature_state(self) -> tuple:
+        """Return creature-land-specific state for memoization."""
+        return (
+            self.name,
+            self.tapped,
+            self.entered_this_turn,
+            self._is_creature,
+            self.attacking,
+            self.damage,
+        )
+
     @property
     def power(self) -> int:
-        return self.creature_power if self.is_creature else 0
+        return self.creature_power if self._is_creature else 0
 
     @property
     def toughness(self) -> int:
-        return self.creature_toughness if self.is_creature else 0
+        return self.creature_toughness if self._is_creature else 0
 
     @property
     def is_alive(self) -> bool:
-        if not self.is_creature:
+        if not self._is_creature:
             return True
         return self.toughness > self.damage
 
     @property
     def has_flying(self) -> bool:
-        return self.is_creature and 'flying' in self.creature_keywords
+        return self._is_creature and 'flying' in self.creature_keywords
 
     def can_attack(self) -> bool:
         """CreatureLand can attack if it's a creature, untapped, and doesn't have summoning sickness."""
-        if not self.is_creature or self.tapped:
+        if not self._is_creature or self.tapped:
             return False
         return not self.entered_this_turn
 
     def can_block(self, attacker) -> bool:
-        if not self.is_creature or self.tapped:
+        if not self._is_creature or self.tapped:
             return False
         if hasattr(attacker, 'has_flying') and attacker.has_flying:
             if not self.has_flying and 'reach' not in self.creature_keywords:
@@ -125,7 +152,7 @@ class CreatureLand(Land):
 
         if not own_main and not opponent_combat:
             return []
-        if self.is_creature:
+        if self._is_creature:
             return []
         if self.tapped:
             return []
@@ -146,7 +173,7 @@ class CreatureLand(Land):
             ns = s.copy()
             for card in ns.battlefield[self.owner]:
                 if card.name == self.name and isinstance(card, CreatureLand):
-                    card.is_creature = True
+                    card._is_creature = True
                     break
             mana_needed = self.activation_cost
             for card in ns.artifacts[self.owner]:
@@ -169,7 +196,7 @@ class CreatureLand(Land):
     def get_attack_actions(self, state: 'GameState') -> List[Action]:
         if state.active_player != self.owner:
             return []
-        if not self.is_creature:
+        if not self._is_creature:
             return []
         if self.tapped:
             return []
@@ -196,7 +223,7 @@ class CreatureLand(Land):
         """
         if state.active_player == self.owner:
             return []
-        if not self.is_creature:
+        if not self._is_creature:
             return []
         if self.tapped:
             return []
@@ -232,7 +259,7 @@ class CreatureLand(Land):
         return actions
 
     def on_end_turn(self, state: 'GameState') -> 'GameState':
-        self.is_creature = False
+        self._is_creature = False
         self.damage = 0
         self.attacking = False
         return state
@@ -246,7 +273,7 @@ class CreatureLand(Land):
             self.all_creature_types
         )
         new_land.tapped = self.tapped
-        new_land.is_creature = self.is_creature
+        new_land._is_creature = self._is_creature
         new_land.damage = self.damage
         new_land.attacking = self.attacking
         new_land.entered_this_turn = self.entered_this_turn

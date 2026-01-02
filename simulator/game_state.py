@@ -61,14 +61,7 @@ class GameState:
 
     def _get_mana_amount(self, card) -> int:
         """Get how much mana a single card produces when tapped."""
-        # Depletion lands (Remote Farm) produce 2 mana per tap
-        if hasattr(card, 'depletion_counters') and card.depletion_counters > 0:
-            return 2
-        # Storage lands (Bottomless Vault) produce mana equal to counters
-        if hasattr(card, 'storage_counters') and card.storage_counters > 0:
-            return card.storage_counters
-        # Regular lands produce 1
-        return 1
+        return card.get_mana_output()
 
     def get_available_mana_by_color(self, player: int) -> Dict[str, int]:
         """Get available mana by color for a player."""
@@ -88,40 +81,35 @@ class GameState:
         return mana
 
     def pay_mana(self, player: int, color: str, amount: int) -> 'GameState':
-        """Pay mana of a specific color, handling special lands. Returns new state."""
+        """Pay mana of a specific color, using card-driven mana production. Returns new state."""
         ns = self.copy()
         remaining = amount
 
-        # Sort lands to use special lands efficiently
+        # Get lands of the right color that can produce mana
         lands = [c for c in ns.battlefield[player]
                  if hasattr(c, 'mana_produced') and c.mana_produced == color and not c.tapped]
 
+        to_sacrifice = []
         for card in lands:
             if remaining <= 0:
                 break
 
             # Skip creature lands with summoning sickness
-            if hasattr(card, 'power') and getattr(card, 'entered_this_turn', False):
+            if card.is_creature() and getattr(card, 'entered_this_turn', False):
                 continue
 
-            if hasattr(card, 'depletion_counters') and card.depletion_counters > 0:
-                # Depletion land: produces 2, removes counter, may sacrifice
-                card.tapped = True
-                card.depletion_counters -= 1
-                remaining -= 2
-                if card.depletion_counters <= 0:
-                    ns.battlefield[player].remove(card)
-                    ns.graveyard[player].append(card)
-            elif hasattr(card, 'storage_counters') and card.storage_counters > 0:
-                # Storage land: produces all counters at once
-                mana_from_storage = min(card.storage_counters, remaining)
-                card.storage_counters -= mana_from_storage
-                card.tapped = True
-                remaining -= mana_from_storage
-            else:
-                # Regular land: produces 1
-                card.tapped = True
-                remaining -= 1
+            # Use card-driven mana production
+            mana_produced = card.tap_for_mana()
+            remaining -= mana_produced
+
+            # Check if card should be sacrificed after tapping
+            if card.should_sacrifice_after_tap():
+                to_sacrifice.append(card)
+
+        # Handle sacrifices
+        for card in to_sacrifice:
+            ns.battlefield[player].remove(card)
+            ns.graveyard[player].append(card)
 
         return ns
 
@@ -135,14 +123,7 @@ class GameState:
 
     def get_creatures(self, player: int) -> List['Card']:
         """Get all creatures for a player."""
-        from .cards import Creature, CreatureLand
-        creatures = []
-        for card in self.battlefield[player]:
-            if isinstance(card, Creature):
-                creatures.append(card)
-            elif isinstance(card, CreatureLand) and card.is_creature:
-                creatures.append(card)
-        return creatures
+        return [card for card in self.battlefield[player] if card.is_creature()]
 
     def signature(self) -> tuple:
         """Create a hashable signature for memoization.
@@ -150,45 +131,17 @@ class GameState:
         Note: Turn number is NOT included because the game outcome depends only
         on the current position, not how many turns it took to get there.
         This greatly improves memoization cache hits.
+
+        Each card provides its own signature state via get_signature_state(),
+        making the system extensible without modifying GameState.
         """
         p1_hand = tuple(sorted(c.name for c in self.hands[0]))
         p2_hand = tuple(sorted(c.name for c in self.hands[1]))
-        # Include all combat-relevant state: attacking, damage, and creature attributes
-        # Note: entered_this_turn only matters for summoning sickness (attacking/tapping)
-        p1_bf = tuple(sorted((c.name, c.tapped,
-                              getattr(c, 'stun_counters', 0),
-                              getattr(c, 'entered_this_turn', False),
-                              getattr(c, 'is_creature', False),
-                              getattr(c, 'attacking', False),
-                              getattr(c, 'damage', 0),
-                              getattr(c, 'plus_counters', 0),
-                              getattr(c, 'return_to_hand', False),
-                              getattr(c, 'level', 0),
-                              getattr(c, 'storage_counters', 0),
-                              getattr(c, 'stay_tapped', False),
-                              getattr(c, 'depletion_counters', 0),
-                              getattr(c, 'spore_counters', 0),
-                              getattr(c, 'eot_power_boost', 0),
-                              getattr(c, 'eot_toughness_boost', 0))
-                             for c in self.battlefield[0]))
-        p2_bf = tuple(sorted((c.name, c.tapped,
-                              getattr(c, 'stun_counters', 0),
-                              getattr(c, 'is_creature', False),
-                              getattr(c, 'entered_this_turn', False),
-                              getattr(c, 'attacking', False),
-                              getattr(c, 'damage', 0),
-                              getattr(c, 'plus_counters', 0),
-                              getattr(c, 'return_to_hand', False),
-                              getattr(c, 'level', 0),
-                              getattr(c, 'storage_counters', 0),
-                              getattr(c, 'stay_tapped', False),
-                              getattr(c, 'depletion_counters', 0),
-                              getattr(c, 'spore_counters', 0),
-                              getattr(c, 'eot_power_boost', 0),
-                              getattr(c, 'eot_toughness_boost', 0))
-                             for c in self.battlefield[1]))
-        p1_art = tuple(sorted((c.name, c.tapped) for c in self.artifacts[0]))
-        p2_art = tuple(sorted((c.name, c.tapped) for c in self.artifacts[1]))
+        # Each card knows what state it needs to include
+        p1_bf = tuple(sorted(c.get_signature_state() for c in self.battlefield[0]))
+        p2_bf = tuple(sorted(c.get_signature_state() for c in self.battlefield[1]))
+        p1_art = tuple(sorted(c.get_signature_state() for c in self.artifacts[0]))
+        p2_art = tuple(sorted(c.get_signature_state() for c in self.artifacts[1]))
         # Include blocking assignments for combat phases
         blocking = tuple(sorted(self.blocking_assignments.items()))
         return (
@@ -207,43 +160,15 @@ class GameState:
         Two states with the same board_signature but different life totals
         can be compared for dominance: if state A has lower life for both
         players than state B, then A is dominated by B.
+
+        Uses card-driven get_signature_state() for extensibility.
         """
         p1_hand = tuple(sorted(c.name for c in self.hands[0]))
         p2_hand = tuple(sorted(c.name for c in self.hands[1]))
-        p1_bf = tuple(sorted((c.name, c.tapped,
-                              getattr(c, 'stun_counters', 0),
-                              getattr(c, 'entered_this_turn', False),
-                              getattr(c, 'is_creature', False),
-                              getattr(c, 'attacking', False),
-                              getattr(c, 'damage', 0),
-                              getattr(c, 'plus_counters', 0),
-                              getattr(c, 'return_to_hand', False),
-                              getattr(c, 'level', 0),
-                              getattr(c, 'storage_counters', 0),
-                              getattr(c, 'stay_tapped', False),
-                              getattr(c, 'depletion_counters', 0),
-                              getattr(c, 'spore_counters', 0),
-                              getattr(c, 'eot_power_boost', 0),
-                              getattr(c, 'eot_toughness_boost', 0))
-                             for c in self.battlefield[0]))
-        p2_bf = tuple(sorted((c.name, c.tapped,
-                              getattr(c, 'stun_counters', 0),
-                              getattr(c, 'is_creature', False),
-                              getattr(c, 'entered_this_turn', False),
-                              getattr(c, 'attacking', False),
-                              getattr(c, 'damage', 0),
-                              getattr(c, 'plus_counters', 0),
-                              getattr(c, 'return_to_hand', False),
-                              getattr(c, 'level', 0),
-                              getattr(c, 'storage_counters', 0),
-                              getattr(c, 'stay_tapped', False),
-                              getattr(c, 'depletion_counters', 0),
-                              getattr(c, 'spore_counters', 0),
-                              getattr(c, 'eot_power_boost', 0),
-                              getattr(c, 'eot_toughness_boost', 0))
-                             for c in self.battlefield[1]))
-        p1_art = tuple(sorted((c.name, c.tapped) for c in self.artifacts[0]))
-        p2_art = tuple(sorted((c.name, c.tapped) for c in self.artifacts[1]))
+        p1_bf = tuple(sorted(c.get_signature_state() for c in self.battlefield[0]))
+        p2_bf = tuple(sorted(c.get_signature_state() for c in self.battlefield[1]))
+        p1_art = tuple(sorted(c.get_signature_state() for c in self.artifacts[0]))
+        p2_art = tuple(sorted(c.get_signature_state() for c in self.artifacts[1]))
         blocking = tuple(sorted(self.blocking_assignments.items()))
         return (
             self.active_player,

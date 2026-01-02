@@ -36,6 +36,21 @@ class Creature(Card):
     def has_flying(self) -> bool:
         return 'flying' in self.keywords
 
+    def is_creature(self) -> bool:
+        """Creatures are always creatures."""
+        return True
+
+    def get_signature_state(self) -> tuple:
+        """Return creature-specific state for memoization."""
+        return (
+            self.name,
+            self.tapped,
+            self.entered_this_turn,
+            True,  # is_creature - always True for Creature
+            self.attacking,
+            self.damage,
+        )
+
     def can_attack(self) -> bool:
         return not self.tapped and not self.entered_this_turn
 

@@ -60,6 +60,37 @@ class Card(ABC):
         """Called at end of turn."""
         return state
 
+    def is_creature(self) -> bool:
+        """Return True if this card is currently a creature."""
+        return False
+
+    def get_mana_output(self) -> int:
+        """Return how much mana this card produces when tapped."""
+        return 0
+
+    def tap_for_mana(self) -> int:
+        """Tap this card for mana, applying any side effects. Returns mana produced.
+
+        Override in subclasses with special tap effects (e.g., depletion lands).
+        Returns the amount of mana actually produced.
+        """
+        if self.tapped:
+            return 0
+        self.tapped = True
+        return self.get_mana_output()
+
+    def should_sacrifice_after_tap(self) -> bool:
+        """Return True if this card should be sacrificed after tapping for mana."""
+        return False
+
+    def get_signature_state(self) -> tuple:
+        """Return hashable state tuple for memoization.
+
+        Override in subclasses to include card-specific state.
+        Base implementation returns minimal common fields.
+        """
+        return (self.name, self.tapped)
+
     @abstractmethod
     def copy(self) -> 'Card':
         """Create a deep copy of this card."""

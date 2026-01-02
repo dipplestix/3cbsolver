@@ -67,6 +67,18 @@ class StudentOfWarfare(Creature):
     def has_double_strike(self) -> bool:
         return self.level >= 7
 
+    def get_signature_state(self) -> tuple:
+        """Return student-specific state including level."""
+        return (
+            self.name,
+            self.tapped,
+            self.entered_this_turn,
+            True,  # is_creature
+            self.attacking,
+            self.damage,
+            self.level,
+        )
+
     def do_auto_level(self, state: 'GameState') -> 'GameState':
         """Automatically level up as much as possible when mana is available."""
         ns = state.copy()

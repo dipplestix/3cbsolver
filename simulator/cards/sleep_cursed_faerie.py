@@ -74,6 +74,18 @@ class SleepCursedFaerie(Creature):
 
         return [Action(f"Cast {self.name}", cast)]
 
+    def get_signature_state(self) -> tuple:
+        """Return faerie-specific state including stun counters."""
+        return (
+            self.name,
+            self.tapped,
+            self.entered_this_turn,
+            True,  # is_creature
+            self.attacking,
+            self.damage,
+            self.stun_counters,
+        )
+
     def can_attack(self) -> bool:
         return not self.tapped and self.stun_counters == 0 and not self.entered_this_turn
 

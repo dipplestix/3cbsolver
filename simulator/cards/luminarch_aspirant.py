@@ -32,6 +32,19 @@ class LuminarchAspirant(Creature):
         self.plus_counters = 0
         self.combat_trigger_used = False  # Track if we've used the trigger this turn
 
+    def get_signature_state(self) -> tuple:
+        """Return aspirant-specific state including counters and trigger state."""
+        return (
+            self.name,
+            self.tapped,
+            self.entered_this_turn,
+            True,  # is_creature
+            self.attacking,
+            self.damage,
+            self.plus_counters,
+            self.combat_trigger_used,
+        )
+
     @property
     def current_power(self) -> int:
         return self.power + self.plus_counters

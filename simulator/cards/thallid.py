@@ -33,6 +33,20 @@ class Thallid(Creature):
         self.eot_power_boost = 0
         self.eot_toughness_boost = 0
 
+    def get_signature_state(self) -> tuple:
+        """Return thallid-specific state including spore counters and boosts."""
+        return (
+            self.name,
+            self.tapped,
+            self.entered_this_turn,
+            True,  # is_creature
+            self.attacking,
+            self.damage,
+            self.spore_counters,
+            self.eot_power_boost,
+            self.eot_toughness_boost,
+        )
+
     def on_upkeep(self, state: 'GameState') -> 'GameState':
         """At beginning of upkeep, put a spore counter on Thallid.
 

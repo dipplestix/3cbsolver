@@ -34,6 +34,19 @@ class HeartfireHero(Creature):
         self.plus_counters = 0
         self.targeted_this_turn = False  # Track Valiant trigger
 
+    def get_signature_state(self) -> tuple:
+        """Return hero-specific state including counters and trigger state."""
+        return (
+            self.name,
+            self.tapped,
+            self.entered_this_turn,
+            True,  # is_creature
+            self.attacking,
+            self.damage,
+            self.plus_counters,
+            self.targeted_this_turn,
+        )
+
     @property
     def current_power(self) -> int:
         return self.power + self.plus_counters
