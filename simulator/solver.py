@@ -8,7 +8,125 @@ from .game_state import GameState
 from .cards import Card, Creature, Land, CreatureLand, Artifact, Action
 from .phases import untap, upkeep, end_turn
 from .combat import resolve_combat_damage
+from .heuristics import evaluate_position
 
+
+# -----------------------------------------------------------------------------
+# Transposition Table Functions
+# -----------------------------------------------------------------------------
+
+def lookup_transposition(memo: Dict, key: tuple, alpha: int, beta: int) -> Optional[int]:
+    """Check transposition table for a usable cached value.
+
+    Args:
+        memo: The transposition table
+        key: (signature, phase, player) tuple
+        alpha: Current alpha bound
+        beta: Current beta bound
+
+    Returns:
+        Cached value if usable, None otherwise
+    """
+    if key not in memo:
+        return None
+
+    cached_value, flag = memo[key]
+
+    if flag == 'exact':
+        return cached_value
+    elif flag == 'lower' and cached_value >= beta:
+        return cached_value  # Fail high
+    elif flag == 'upper' and cached_value <= alpha:
+        return cached_value  # Fail low
+
+    return None
+
+
+def store_transposition(memo: Dict, key: tuple, value: int, original_alpha: int, beta: int) -> str:
+    """Store result in transposition table with appropriate bound flag.
+
+    Args:
+        memo: The transposition table
+        key: (signature, phase, player) tuple
+        value: The computed value
+        original_alpha: Alpha value at start of search
+        beta: Beta bound
+
+    Returns:
+        The flag used ('exact', 'lower', or 'upper')
+    """
+    if value <= original_alpha:
+        flag = 'upper'  # Failed low, this is an upper bound
+    elif value >= beta:
+        flag = 'lower'  # Failed high, this is a lower bound
+    else:
+        flag = 'exact'
+
+    memo[key] = (value, flag)
+    return flag
+
+
+# -----------------------------------------------------------------------------
+# Dominance Table Functions
+# -----------------------------------------------------------------------------
+
+def check_dominance(dominance: Dict, board_key: tuple, life: List[int], player: int) -> Optional[int]:
+    """Check if position is dominated by a known result.
+
+    If a better state was a loss, this state is also a loss.
+    If a worse state was a win, this state is also a win.
+
+    Args:
+        dominance: The dominance table
+        board_key: (board_signature, phase, player) tuple
+        life: [player_life, opponent_life]
+        player: The player we're evaluating for
+
+    Returns:
+        1 if dominated by win, -1 if dominated by loss, None otherwise
+    """
+    if board_key not in dominance:
+        return None
+
+    my_life = life[player]
+    opp_life = life[1 - player]
+
+    for (cached_my_life, cached_opp_life, cached_result) in dominance[board_key]:
+        # If cached state had better/equal life for player and worse/equal for opponent
+        # and resulted in a loss, then this state is also a loss
+        if cached_my_life >= my_life and cached_opp_life <= opp_life:
+            if cached_result == -1:
+                return -1  # Dominated by a losing state
+
+        # If cached state had worse/equal life for player and better/equal for opponent
+        # and resulted in a win, then this state is also a win
+        if cached_my_life <= my_life and cached_opp_life >= opp_life:
+            if cached_result == 1:
+                return 1  # Dominates a winning state
+
+    return None
+
+
+def store_dominance(dominance: Dict, board_key: tuple, life: List[int], player: int, result: int):
+    """Store result in dominance table.
+
+    Only stores exact values (not alpha-beta bounds).
+
+    Args:
+        dominance: The dominance table
+        board_key: (board_signature, phase, player) tuple
+        life: [player_life, opponent_life]
+        player: The player we're evaluating for
+        result: The computed result (1, -1, or 0)
+    """
+    if board_key not in dominance:
+        dominance[board_key] = []
+    dominance[board_key].append((life[player], life[1 - player], result))
+
+
+# -----------------------------------------------------------------------------
+# Action Generation
+# -----------------------------------------------------------------------------
 
 def get_available_actions(state: GameState) -> List[Action]:
     """Get all available actions for the current player and phase."""
@@ -166,14 +284,6 @@ def minimax(state: GameState, player: int, memo: Dict = None, depth: int = 0,
     """
     Minimax search with alpha-beta pruning and transposition table.
     Returns: 1 = player wins, -1 = player loses, 0 = draw
-
-    Memoization stores (value, flag) where flag is:
-    - 'exact': This is the exact value
-    - 'lower': This is a lower bound (alpha cutoff occurred)
-    - 'upper': This is an upper bound (beta cutoff occurred)
-
-    Dominance table maps board_signature -> list of (life, result) pairs.
-    If a state with better life (for player) has result -1, any worse state is also -1.
     """
     if memo is None:
         memo = {}
@@ -188,107 +298,22 @@ def minimax(state: GameState, player: int, memo: Dict = None, depth: int = 0,
             return -1
         return 0
 
-    # Early heuristic for grinding games with token generators
-    # Token generator vs static creature is mathematically determined
-    if depth > 30 and not state.hands[0] and not state.hands[1]:
-        def has_token_gen(bf):
-            return any(c.name == 'Thallid' for c in bf)
-
-        def can_grow(creatures):
-            for c in creatures:
-                if hasattr(c, 'plus_counters'):  # Aspirant, landfall creatures
-                    return True
-                if hasattr(c, 'level'):  # Student of Warfare
-                    return True
-                # Stromkirk Noble grows when dealing combat damage
-                if c.name == 'Stromkirk Noble':
-                    return True
-            return False
-
-        p1_creatures = [c for c in state.battlefield[0] if hasattr(c, 'power') and c.power > 0]
-        p2_creatures = [c for c in state.battlefield[1] if hasattr(c, 'power') and c.power > 0]
-        p1_token_gen = has_token_gen(state.battlefield[0])
-        p2_token_gen = has_token_gen(state.battlefield[1])
-        p1_grows = can_grow(p1_creatures)
-        p2_grows = can_grow(p2_creatures)
-
-        # Token generator beats static creature (infinite tokens overwhelm)
-        if p2_token_gen and not p1_token_gen and not p1_grows and p1_creatures:
-            return 1 if player == 1 else -1
-        if p1_token_gen and not p2_token_gen and not p2_grows and p2_creatures:
-            return 1 if player == 0 else -1
-
-    # Depth limit / repetition check - apply heuristics at max depth
-    if depth > 500:
-        # Only apply heuristics when hands are empty (game is in grinding phase)
-        if not state.hands[0] and not state.hands[1]:
-            p1_creatures = [c for c in state.battlefield[0] if hasattr(c, 'power') and c.power > 0]
-            p2_creatures = [c for c in state.battlefield[1] if hasattr(c, 'power') and c.power > 0]
-
-            # Check if one side has creatures and the other has nothing
-            if p1_creatures and not p2_creatures:
-                return 1 if player == 0 else -1
-            elif p2_creatures and not p1_creatures:
-                return 1 if player == 1 else -1
-
-            # Check for token generator vs static creature
-            # Thallid beats creatures that can't grow or generate tokens
-            def has_token_gen(bf):
-                return any(c.name == 'Thallid' for c in bf)
-
-            def can_grow(creatures):
-                for c in creatures:
-                    if hasattr(c, 'plus_counters'):  # Aspirant, landfall creatures
-                        return True
-                    if hasattr(c, 'level'):  # Student of Warfare
-                        return True
-                return False
-
-            p1_token_gen = has_token_gen(state.battlefield[0])
-            p2_token_gen = has_token_gen(state.battlefield[1])
-            p1_grows = can_grow(p1_creatures)
-            p2_grows = can_grow(p2_creatures)
-
-            if p2_token_gen and not p1_token_gen and not p1_grows:
-                return 1 if player == 1 else -1
-            if p1_token_gen and not p2_token_gen and not p2_grows:
-                return 1 if player == 0 else -1
-
-            # Growing creature beats token generator (quadratic damage vs linear blockers)
-            if p1_grows and not p1_token_gen and p2_token_gen and not p2_grows:
-                return 1 if player == 0 else -1
-            if p2_grows and not p2_token_gen and p1_token_gen and not p1_grows:
-                return 1 if player == 1 else -1
-
-        return 0  # Draw by excessive depth (stalemate)
+    # Apply heuristics for early termination
+    heuristic_result = evaluate_position(state, player, depth)
+    if heuristic_result is not None:
+        return heuristic_result
 
     # Transposition table lookup
     key = (state.signature(), state.phase, player)
-    if key in memo:
-        cached_value, flag = memo[key]
-        if flag == 'exact':
-            return cached_value
-        elif flag == 'lower' and cached_value >= beta:
-            return cached_value  # Fail high
-        elif flag == 'upper' and cached_value <= alpha:
-            return cached_value  # Fail low
+    cached = lookup_transposition(memo, key, alpha, beta)
+    if cached is not None:
+        return cached
 
-    # Dominance check: if a better state was a loss, this is also a loss
+    # Dominance check
     board_key = (state.board_signature(), state.phase, player)
-    if board_key in dominance:
-        my_life = state.life[player]
-        opp_life = state.life[1 - player]
-        for (cached_my_life, cached_opp_life, cached_result) in dominance[board_key]:
-            # If cached state had better/equal life for player and worse/equal for opponent
-            # and resulted in a loss, then this state is also a loss
-            if cached_my_life >= my_life and cached_opp_life <= opp_life:
-                if cached_result == -1:
-                    return -1  # Dominated by a losing state
-            # If cached state had worse/equal life for player and better/equal for opponent
-            # and resulted in a win, then this state is also a win
-            if cached_my_life <= my_life and cached_opp_life >= opp_life:
-                if cached_result == 1:
-                    return 1  # Dominates a winning state
+    dominated = check_dominance(dominance, board_key, state.life, player)
+    if dominated is not None:
+        return dominated
 
     original_alpha = alpha
 
@@ -321,7 +346,7 @@ def minimax(state: GameState, player: int, memo: Dict = None, depth: int = 0,
     actions = get_available_actions(state)
 
     if not actions:
-        # No actions available, pass
+        # No actions available, pass to next phase
         if state.phase == "main1":
             new_state = state.copy()
             new_state.phase = "combat_attack"
@@ -340,15 +365,13 @@ def minimax(state: GameState, player: int, memo: Dict = None, depth: int = 0,
         return result
 
     # Determine who is making the decision
-    # In main1 and combat_attack: active player decides
-    # In combat_block: defending player (1 - active_player) decides
     if state.phase == "combat_block":
         decision_maker = 1 - state.active_player
     else:
         decision_maker = state.active_player
 
+    # Search with alpha-beta pruning
     if decision_maker == player:
-        # Maximizing player
         best_score = -2
         for action in actions:
             new_state = action.execute(state)
@@ -356,9 +379,8 @@ def minimax(state: GameState, player: int, memo: Dict = None, depth: int = 0,
             best_score = max(best_score, score)
             alpha = max(alpha, score)
             if alpha >= beta:
-                break  # Beta cutoff
+                break
     else:
-        # Minimizing player
         best_score = 2
         for action in actions:
             new_state = action.execute(state)
@@ -366,19 +388,12 @@ def minimax(state: GameState, player: int, memo: Dict = None, depth: int = 0,
             best_score = min(best_score, score)
             beta = min(beta, score)
             if alpha >= beta:
-                break  # Alpha cutoff
+                break
 
-    # Store in transposition table with appropriate flag
-    if best_score <= original_alpha:
-        memo[key] = (best_score, 'upper')  # Failed low, this is an upper bound
-    elif best_score >= beta:
-        memo[key] = (best_score, 'lower')  # Failed high, this is a lower bound
-    else:
-        memo[key] = (best_score, 'exact')  # Exact value
-        # Only store EXACT values in dominance table (not alpha-beta bounds)
-        if board_key not in dominance:
-            dominance[board_key] = []
-        dominance[board_key].append((state.life[player], state.life[1 - player], best_score))
+    # Store results
+    flag = store_transposition(memo, key, best_score, original_alpha, beta)
+    if flag == 'exact':
+        store_dominance(dominance, board_key, state.life, player, best_score)
 
     return best_score
 

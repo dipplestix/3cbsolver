@@ -5,6 +5,10 @@ from .solver import (
     find_optimal_line,
     get_available_actions,
     minimax,
+    lookup_transposition,
+    store_transposition,
+    check_dominance,
+    store_dominance,
 )
 from .combat import resolve_combat_damage
 from .helpers import (
@@ -14,6 +18,11 @@ from .helpers import (
     has_double_strike,
     has_deathtouch,
     is_lethal_damage,
+)
+from .heuristics import (
+    evaluate_position,
+    evaluate_early_grinding,
+    evaluate_max_depth,
 )
 from .phases import untap, upkeep, end_turn
 from .cards import (
@@ -46,11 +55,16 @@ __all__ = [
     # Solver
     'GameState', 'solve', 'find_optimal_line',
     'get_available_actions', 'minimax',
+    # Transposition & Dominance
+    'lookup_transposition', 'store_transposition',
+    'check_dominance', 'store_dominance',
     # Combat
     'resolve_combat_damage',
     # Helpers
     'get_creature_power', 'get_creature_toughness',
     'has_first_strike', 'has_double_strike', 'has_deathtouch', 'is_lethal_damage',
+    # Heuristics
+    'evaluate_position', 'evaluate_early_grinding', 'evaluate_max_depth',
     # Phases
     'end_turn', 'upkeep', 'untap',
     # Base classes
