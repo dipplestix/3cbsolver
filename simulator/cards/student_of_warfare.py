@@ -1,4 +1,22 @@
-"""Student of Warfare card for the 3CB simulator."""
+"""Student of Warfare card for the 3CB simulator.
+
+Scryfall Oracle Text:
+---------------------
+Student of Warfare {W}
+Creature — Human Knight
+
+Level up {W} ({W}: Put a level counter on this. Level up only as a sorcery.)
+
+LEVEL 2-6
+3/3
+First strike
+
+LEVEL 7+
+4/4
+Double strike
+
+1/1
+"""
 from typing import List, TYPE_CHECKING
 
 from .base import Action
@@ -9,15 +27,7 @@ if TYPE_CHECKING:
 
 
 class StudentOfWarfare(Creature):
-    """
-    Student of Warfare - W
-    Creature - Human Knight
-    1/1
-    Level up W (W: Put a level counter on this. Level up only as a sorcery.)
-    LEVEL 0-1: 1/1
-    LEVEL 2-6: 3/3, First strike
-    LEVEL 7+: 4/4, First strike, Double strike
-    """
+    """Student of Warfare - a level-up creature that grows stronger."""
 
     def __init__(self, owner: int):
         super().__init__(

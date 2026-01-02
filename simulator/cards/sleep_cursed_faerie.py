@@ -1,4 +1,22 @@
-"""Sleep-Cursed Faerie card for the 3CB simulator."""
+"""Sleep-Cursed Faerie card for the 3CB simulator.
+
+Scryfall Oracle Text:
+---------------------
+Sleep-Cursed Faerie {U}
+Creature — Faerie Wizard
+
+Flying, ward {2}
+This creature enters tapped with three stun counters on it.
+(If it would become untapped, remove a stun counter from it instead.)
+{1}{U}: Untap this creature.
+
+3/3
+
+Implementation Notes:
+- Ward {2} is not implemented (no targeting in this simulator)
+- {1}{U} untap ability is not implemented (would add branching)
+- Stun counters correctly replace untapping in the untap phase
+"""
 from typing import List, TYPE_CHECKING
 
 from .base import Action
@@ -9,12 +27,7 @@ if TYPE_CHECKING:
 
 
 class SleepCursedFaerie(Creature):
-    """
-    Sleep-Cursed Faerie - U, 3/3 flying.
-    Enters tapped with 3 stun counters.
-    At beginning of your turn, remove a stun counter.
-    Can't attack or block while it has stun counters.
-    """
+    """Sleep-Cursed Faerie - a 3/3 flyer that enters tapped with stun counters."""
 
     def __init__(self, owner: int):
         super().__init__(

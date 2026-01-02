@@ -1,13 +1,21 @@
 """3CB Combat Simulator"""
+from .game_state import GameState
 from .solver import (
-    GameState,
     solve,
     find_optimal_line,
     get_available_actions,
     minimax,
-    resolve_combat_damage,
-    end_turn,
 )
+from .combat import resolve_combat_damage
+from .helpers import (
+    get_creature_power,
+    get_creature_toughness,
+    has_first_strike,
+    has_double_strike,
+    has_deathtouch,
+    is_lethal_damage,
+)
+from .phases import untap, upkeep, end_turn
 from .cards import (
     Card, Action, CardType,
     Land, CreatureLand, Creature, Artifact,
@@ -38,7 +46,13 @@ __all__ = [
     # Solver
     'GameState', 'solve', 'find_optimal_line',
     'get_available_actions', 'minimax',
-    'resolve_combat_damage', 'end_turn',
+    # Combat
+    'resolve_combat_damage',
+    # Helpers
+    'get_creature_power', 'get_creature_toughness',
+    'has_first_strike', 'has_double_strike', 'has_deathtouch', 'is_lethal_damage',
+    # Phases
+    'end_turn', 'upkeep', 'untap',
     # Base classes
     'Card', 'Action', 'CardType',
     'Land', 'CreatureLand', 'Creature', 'Artifact',
