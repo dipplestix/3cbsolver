@@ -4,7 +4,7 @@ import argparse
 import signal
 from simulator import (
     solve, GameState, get_available_actions, minimax,
-    resolve_combat_damage, end_turn,
+    resolve_combat_damage, end_turn, untap,
     create_island, create_forest, create_plains, create_mountain,
     create_hammerheim,
     create_mox_jet, create_mutavault,
@@ -18,19 +18,20 @@ from simulator import (
     create_thallid, create_pendelhaven,
 )
 
-# Deck definitions (dryads and chocobo at end for metagame table)
+# Deck definitions - only enabled decks for now
 DECKS = {
+    "goldfish": ("Goldfish (no cards)", lambda p: []),
     "student": ("Plains + Student of Warfare", lambda p: [create_plains(p), create_student_of_warfare(p)]),
     "scf": ("Island + Sleep-Cursed Faerie", lambda p: [create_island(p), create_sleep_cursed_faerie(p)]),
     "tiger": ("Forest + Scythe Tiger", lambda p: [create_forest(p), create_scythe_tiger(p)]),
-    "mutavault": ("Mox Jet + Mutavault", lambda p: [create_mox_jet(p), create_mutavault(p)]),
-    "sniper": ("Dryad Arbor + Dragon Sniper", lambda p: [create_dryad_arbor(p), create_dragon_sniper(p)]),
-    "noble": ("Mountain + Stromkirk Noble", lambda p: [create_mountain(p), create_stromkirk_noble(p)]),
-    "hero": ("Hammerheim + Heartfire Hero", lambda p: [create_hammerheim(p), create_heartfire_hero(p)]),
-    "urami": ("Bottomless Vault + Tomb of Urami", lambda p: [create_bottomless_vault(p), create_tomb_of_urami(p)]),
-    "aspirant": ("Remote Farm + Luminarch Aspirant", lambda p: [create_remote_farm(p), create_luminarch_aspirant(p)]),
-    "thallid": ("Pendelhaven + Thallid", lambda p: [create_pendelhaven(p), create_thallid(p)]),
-    # Temporarily disabled:
+    # Temporarily disabled for refactoring:
+    # "mutavault": ("Mox Jet + Mutavault", lambda p: [create_mox_jet(p), create_mutavault(p)]),
+    # "sniper": ("Dryad Arbor + Dragon Sniper", lambda p: [create_dryad_arbor(p), create_dragon_sniper(p)]),
+    # "noble": ("Mountain + Stromkirk Noble", lambda p: [create_mountain(p), create_stromkirk_noble(p)]),
+    # "hero": ("Hammerheim + Heartfire Hero", lambda p: [create_hammerheim(p), create_heartfire_hero(p)]),
+    # "urami": ("Bottomless Vault + Tomb of Urami", lambda p: [create_bottomless_vault(p), create_tomb_of_urami(p)]),
+    # "aspirant": ("Remote Farm + Luminarch Aspirant", lambda p: [create_remote_farm(p), create_luminarch_aspirant(p)]),
+    # "thallid": ("Pendelhaven + Thallid", lambda p: [create_pendelhaven(p), create_thallid(p)]),
     # "dryads": ("Forest + Old-Growth Dryads", lambda p: [create_forest(p), create_old_growth_dryads(p)]),
     # "chocobo": ("Undiscovered Paradise + Sazh's Chocobo", lambda p: [create_undiscovered_paradise(p), create_sazhs_chocobo(p)]),
 }
@@ -537,11 +538,14 @@ def cmd_show(args):
             else:
                 stalemate_count = 0
             last_turn_end_state = current_state_sig
-            # Track state changes during end_turn (upkeep triggers)
-            cards_before = get_card_states(state)
             state = end_turn(state)
+            continue
+        if state.phase == "untap":
+            # Track state changes during untap (upkeep triggers, auto-level)
+            cards_before = get_card_states(state)
+            state = untap(state)
             cards_after = get_card_states(state)
-            # Format upkeep notes for the new active player
+            # Format upkeep notes for the active player
             upkeep_notes = format_upkeep_notes(cards_before, cards_after, state.active_player)
             if upkeep_notes:
                 player = "P1" if state.active_player == 0 else "P2"
@@ -602,6 +606,193 @@ def cmd_list(args):
         print(f"  {key:<12} {name}")
 
 
+def cmd_goldfish(args):
+    """Test a deck against goldfish (no opponent cards)."""
+    d1_name, d1_factory = DECKS[args.deck][0], DECKS[args.deck][1]
+
+    print(f"\n{d1_name} vs Goldfish")
+    print("-" * 40)
+
+    p1_hand = d1_factory(0)
+
+    if args.show:
+        # Show detailed optimal line (reuse cmd_show logic)
+        state = GameState(
+            life=[20, 20],
+            hands=[[c.copy() for c in p1_hand], []],
+            battlefield=[[], []],
+            artifacts=[[], []],
+            graveyard=[[], []],
+            active_player=0,
+            phase="main1",
+            turn=1
+        )
+
+        result, desc = solve([c.copy() for c in p1_hand], [], first_player=0)
+        print(f"Result: {desc}")
+        print()
+
+        print(f"{'Turn':<6} {'Player':<6} {'Action':<35} {'P1 Life':<8} {'P2 Life':<8} {'Notes'}")
+        print("-" * 100)
+
+        memo = {}
+        depth = 0
+
+        while not state.game_over and depth < args.max_depth:
+            if state.phase == "combat_damage":
+                state = resolve_combat_damage(state)
+                continue
+            if state.phase == "end_turn":
+                state = end_turn(state)
+                continue
+            if state.phase == "untap":
+                cards_before = get_card_states(state)
+                state = untap(state)
+                cards_after = get_card_states(state)
+                upkeep_notes = format_upkeep_notes(cards_before, cards_after, state.active_player)
+                if upkeep_notes:
+                    player = "P1" if state.active_player == 0 else "P2"
+                    print(f"{state.turn:<6} {player:<6} {'(upkeep)':<35} {state.life[0]:<8} {state.life[1]:<8} {upkeep_notes}")
+                continue
+
+            actions = get_available_actions(state)
+            if not actions:
+                break
+
+            if state.phase == "combat_block":
+                decision_maker = 1 - state.active_player
+            else:
+                decision_maker = state.active_player
+
+            best_action = None
+            best_score = None
+            for action in actions:
+                new_state = action.execute(state)
+                score = minimax(new_state, decision_maker, memo, 0)
+                if best_score is None or score > best_score:
+                    best_score = score
+                    best_action = action
+
+            if best_action:
+                player = "P1" if state.active_player == 0 else "P2"
+                action_player = state.active_player
+                if state.phase == "combat_block":
+                    player = "P1" if (1 - state.active_player) == 0 else "P2"
+                    action_player = 1 - state.active_player
+                cards_before = get_card_states(state)
+                powers_before = get_creature_powers(state)
+                state = best_action.execute(state)
+                cards_after = get_card_states(state)
+                powers_after = get_creature_powers(state)
+                notes = format_notes(cards_before, cards_after, action_player)
+                power_changes = format_power_changes(powers_before, powers_after)
+                all_notes = " ".join(filter(None, [notes, power_changes]))
+                print(f"{state.turn:<6} {player:<6} {best_action.description:<35} {state.life[0]:<8} {state.life[1]:<8} {all_notes}")
+
+            depth += 1
+
+        if state.game_over:
+            if state.winner == 0:
+                print(f"\n>>> P1 WINS on turn {state.turn}")
+            elif state.winner == 1:
+                print(f"\n>>> P2 WINS")
+    else:
+        # Compact output: actions, notes, and win turn
+        state = GameState(
+            life=[20, 20],
+            hands=[[c.copy() for c in p1_hand], []],
+            battlefield=[[], []],
+            artifacts=[[], []],
+            graveyard=[[], []],
+            active_player=0,
+            phase="main1",
+            turn=1
+        )
+
+        print(f"{'Turn':<6} {'Action':<40} {'Life':<6} {'Notes'}")
+        print("-" * 80)
+
+        memo = {}
+        depth = 0
+        p1_turn = 1  # Track P1's turn count separately
+        last_p1_turn_printed = 0
+
+        while not state.game_over and depth < args.max_depth:
+            if state.phase == "combat_damage":
+                state = resolve_combat_damage(state)
+                continue
+            if state.phase == "end_turn":
+                # Track when P1's turn ends to increment counter
+                if state.active_player == 0:
+                    p1_turn += 1
+                state = end_turn(state)
+                continue
+            if state.phase == "untap":
+                cards_before = get_card_states(state)
+                state = untap(state)
+                cards_after = get_card_states(state)
+                upkeep_notes = format_upkeep_notes(cards_before, cards_after, state.active_player)
+                if upkeep_notes and state.active_player == 0:
+                    print(f"{p1_turn:<6} {'(upkeep)':<40} {state.life[1]:<6} {upkeep_notes}")
+                    last_p1_turn_printed = p1_turn
+                continue
+
+            actions = get_available_actions(state)
+            if not actions:
+                break
+
+            # Only care about P1's actions (goldfish just passes)
+            if state.active_player == 1:
+                for action in actions:
+                    if "Pass" in action.description or "No" in action.description:
+                        state = action.execute(state)
+                        break
+                depth += 1
+                continue
+
+            if state.phase == "combat_block":
+                decision_maker = 1 - state.active_player
+            else:
+                decision_maker = state.active_player
+
+            best_action = None
+            best_score = None
+            for action in actions:
+                new_state = action.execute(state)
+                score = minimax(new_state, decision_maker, memo, 0)
+                if best_score is None or score > best_score:
+                    best_score = score
+                    best_action = action
+
+            if best_action:
+                # Skip Pass/No Attack/No Block for cleaner output
+                if "Pass" not in best_action.description and "No " not in best_action.description:
+                    cards_before = get_card_states(state)
+                    powers_before = get_creature_powers(state)
+                    state = best_action.execute(state)
+                    cards_after = get_card_states(state)
+                    powers_after = get_creature_powers(state)
+                    notes = format_notes(cards_before, cards_after, 0)
+                    power_changes = format_power_changes(powers_before, powers_after)
+                    all_notes = " ".join(filter(None, [notes, power_changes]))
+                    print(f"{p1_turn:<6} {best_action.description:<40} {state.life[1]:<6} {all_notes}")
+                    last_p1_turn_printed = p1_turn
+                else:
+                    state = best_action.execute(state)
+
+            depth += 1
+
+        print("-" * 80)
+        if state.game_over and state.winner == 0:
+            # Use last printed turn or current p1_turn
+            win_turn = last_p1_turn_printed if last_p1_turn_printed > 0 else p1_turn
+            print(f"Goldfish defeated on turn {win_turn}")
+        elif state.game_over and state.winner == 1:
+            print(f"P1 LOSES (somehow?)")
+        else:
+            print(f"Draw/Timeout")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="3CB Combat Simulator",
@@ -609,7 +800,9 @@ def main():
         epilog="""
 Examples:
   python cli.py solve tiger scf           Solve Tiger vs SCF matchup
-  python cli.py solve scf mutavault --first 1   SCF vs Mutavault, P2 first
+  python cli.py solve student scf --first 1   Student vs SCF, P2 first
+  python cli.py goldfish student          Test Student vs Goldfish
+  python cli.py goldfish student --show   Show optimal line vs Goldfish
   python cli.py metagame                  Run full metagame table
   python cli.py show tiger scf            Show optimal play line
   python cli.py list                      List available decks
@@ -640,12 +833,21 @@ Examples:
     # list command
     subparsers.add_parser("list", help="List available decks")
 
+    # goldfish command
+    non_goldfish_decks = [k for k in DECKS.keys() if k != "goldfish"]
+    p = subparsers.add_parser("goldfish", help="Test a deck against goldfish (no opponent)")
+    p.add_argument("deck", choices=non_goldfish_decks, help="Deck to test")
+    p.add_argument("--show", "-s", action="store_true", help="Show optimal play line")
+    p.add_argument("--timeout", type=int, default=30, help="Solver timeout in seconds")
+    p.add_argument("--max-depth", type=int, default=100, help="Max turns to show")
+
     args = parser.parse_args()
     {
         "solve": cmd_solve,
         "metagame": cmd_metagame,
         "show": cmd_show,
         "list": cmd_list,
+        "goldfish": cmd_goldfish,
     }[args.command](args)
 
 

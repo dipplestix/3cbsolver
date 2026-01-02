@@ -1,4 +1,19 @@
-"""Scythe Tiger card for the 3CB simulator."""
+"""Scythe Tiger card for the 3CB simulator.
+
+Scryfall Oracle Text:
+---------------------
+Scythe Tiger {G}
+Creature — Cat
+
+Shroud (This creature can't be the target of spells or abilities.)
+When this creature enters, sacrifice it unless you sacrifice a land.
+
+3/2
+
+Implementation Notes:
+- Shroud is not relevant (no targeting in this simulator)
+- Land sacrifice is mandatory on cast (handled in get_play_actions)
+"""
 from typing import List, TYPE_CHECKING
 
 from .base import Action
@@ -10,11 +25,7 @@ if TYPE_CHECKING:
 
 
 class ScytheTiger(Creature):
-    """
-    Scythe Tiger - G, 3/2.
-    Shroud (This creature can't be the target of spells or abilities.)
-    When Scythe Tiger enters the battlefield, sacrifice it unless you sacrifice a land.
-    """
+    """Scythe Tiger - a 3/2 that requires sacrificing a land to keep."""
 
     def __init__(self, owner: int):
         super().__init__(

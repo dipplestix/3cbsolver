@@ -80,11 +80,19 @@ class LuminarchAspirant(Creature):
         if self.entered_this_turn:
             return []  # Summoning sickness
 
-        # Standard attack action
+        # Check if we should auto-apply trigger (only creature on battlefield)
+        creatures = [c for c in state.battlefield[self.owner] if hasattr(c, 'power')]
+        auto_apply_trigger = (len(creatures) == 1 and creatures[0].name == self.name
+                              and not self.combat_trigger_used)
+
         def attack(s: 'GameState') -> 'GameState':
             ns = s.copy()
             for card in ns.battlefield[self.owner]:
                 if card.name == self.name and isinstance(card, LuminarchAspirant):
+                    # Auto-apply trigger if we're the only creature
+                    if auto_apply_trigger:
+                        card.plus_counters += 1
+                        card.combat_trigger_used = True
                     card.attacking = True
                     card.tapped = True
                     break
@@ -93,7 +101,10 @@ class LuminarchAspirant(Creature):
         return [Action(f"Attack with {self.name}", attack)]
 
     def get_battlefield_actions(self, state: 'GameState') -> List[Action]:
-        """At beginning of combat, put +1/+1 counter on target creature you control."""
+        """At beginning of combat, put +1/+1 counter on target creature you control.
+
+        Auto-applies the trigger when Aspirant is the only creature (always optimal).
+        """
         if state.active_player != self.owner:
             return []
         # Trigger at combat_attack phase before declaring attackers
@@ -102,26 +113,42 @@ class LuminarchAspirant(Creature):
         if self.combat_trigger_used:
             return []
 
-        actions = []
-        # Can target any creature we control
-        # Deduplicate identical creatures (e.g., multiple Saprolings) to reduce branching
-        seen_names = set()
+        # Find all creatures we control
+        creatures = []
         for card in state.battlefield[self.owner]:
-            if not hasattr(card, 'power'):  # Not a creature
-                continue
+            if hasattr(card, 'power'):
+                creatures.append(card)
+
+        # If Aspirant is the only creature, auto-apply trigger (no choice needed)
+        if len(creatures) == 1 and creatures[0].name == self.name:
+            def buff_self(s: 'GameState') -> 'GameState':
+                ns = s.copy()
+                for c in ns.battlefield[self.owner]:
+                    if c.name == self.name and isinstance(c, LuminarchAspirant):
+                        c.combat_trigger_used = True
+                        c.plus_counters += 1
+                        break
+                return ns
+            # Return single mandatory action - solver will take it automatically
+            return [Action("Aspirant: +1/+1 on self", buff_self)]
+
+        # Multiple creatures - offer choices, but it's a mandatory trigger
+        # so we ONLY return trigger actions (not attack actions)
+        # The attack phase will be handled after trigger resolves
+        actions = []
+        seen_names = set()
+        for card in creatures:
             if card.name in seen_names:
-                continue  # Skip duplicates
+                continue
             seen_names.add(card.name)
 
             def make_buff_action(creature_name):
                 def buff_creature(s: 'GameState') -> 'GameState':
                     ns = s.copy()
-                    # Mark trigger as used
                     for c in ns.battlefield[self.owner]:
                         if c.name == self.name and isinstance(c, LuminarchAspirant):
                             c.combat_trigger_used = True
                             break
-                    # Add counter to target
                     for c in ns.battlefield[self.owner]:
                         if c.name == creature_name:
                             if hasattr(c, 'plus_counters'):

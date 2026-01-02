@@ -1,4 +1,16 @@
-"""Land cards for the 3CB simulator."""
+"""Land cards for the 3CB simulator.
+
+Scryfall Oracle Text (Basic Lands):
+-----------------------------------
+Plains - Basic Land — Plains
+(T: Add W.)
+
+Island - Basic Land — Island
+(T: Add U.)
+
+Forest - Basic Land — Forest
+(T: Add G.)
+"""
 from typing import List, Optional, TYPE_CHECKING
 
 from .base import Card, Action, CardType
