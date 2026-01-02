@@ -20,6 +20,15 @@ class UndiscoveredParadise(Land):
         super().__init__("Undiscovered Paradise", owner, 'any')
         self.return_to_hand = False
 
+    def get_signature_state(self) -> tuple:
+        """Return paradise-specific state including bounce flag."""
+        return (
+            self.name,
+            self.tapped,
+            self.entered_this_turn,
+            self.return_to_hand,
+        )
+
     def get_play_actions(self, state: 'GameState') -> List[Action]:
         if state.active_player != self.owner:
             return []

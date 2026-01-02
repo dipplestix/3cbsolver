@@ -4,7 +4,7 @@ import argparse
 import signal
 from simulator import (
     solve, GameState, get_available_actions, minimax,
-    resolve_combat_damage, end_turn, untap,
+    resolve_combat_damage, end_turn, untap, upkeep,
     create_island, create_forest, create_plains, create_mountain,
     create_hammerheim,
     create_mox_jet, create_mutavault,
@@ -20,7 +20,6 @@ from simulator import (
 
 # Deck definitions - only enabled decks for now
 DECKS = {
-    "goldfish": ("Goldfish (no cards)", lambda p: []),
     "student": ("Plains + Student of Warfare", lambda p: [create_plains(p), create_student_of_warfare(p)]),
     "scf": ("Island + Sleep-Cursed Faerie", lambda p: [create_island(p), create_sleep_cursed_faerie(p)]),
     "tiger": ("Forest + Scythe Tiger", lambda p: [create_forest(p), create_scythe_tiger(p)]),
@@ -302,7 +301,7 @@ def cmd_metagame(args):
     print("=" * 60)
     print()
 
-    from nash import compute_nash_equilibrium, format_nash_strategy
+    from simulator.nash import compute_nash_equilibrium, format_nash_strategy
     row_strat, col_strat, game_value = compute_nash_equilibrium(payoff_matrix)
 
     print("Optimal mixed strategy:")
@@ -541,14 +540,17 @@ def cmd_show(args):
             state = end_turn(state)
             continue
         if state.phase == "untap":
-            # Track state changes during untap (upkeep triggers, auto-level)
-            cards_before = get_card_states(state)
             state = untap(state)
+            continue
+        if state.phase == "upkeep":
+            # Track state changes during upkeep (triggers, auto-level)
+            cards_before = get_card_states(state)
+            active = state.active_player  # Save before upkeep modifies state
+            state = upkeep(state)
             cards_after = get_card_states(state)
-            # Format upkeep notes for the active player
-            upkeep_notes = format_upkeep_notes(cards_before, cards_after, state.active_player)
+            upkeep_notes = format_upkeep_notes(cards_before, cards_after, active)
             if upkeep_notes:
-                player = "P1" if state.active_player == 0 else "P2"
+                player = "P1" if active == 0 else "P2"
                 print(f"{state.turn:<6} {player:<6} {'(upkeep)':<35} {state.life[0]:<8} {state.life[1]:<8} {upkeep_notes}")
             continue
 
@@ -646,12 +648,16 @@ def cmd_goldfish(args):
                 state = end_turn(state)
                 continue
             if state.phase == "untap":
-                cards_before = get_card_states(state)
                 state = untap(state)
+                continue
+            if state.phase == "upkeep":
+                cards_before = get_card_states(state)
+                active = state.active_player
+                state = upkeep(state)
                 cards_after = get_card_states(state)
-                upkeep_notes = format_upkeep_notes(cards_before, cards_after, state.active_player)
+                upkeep_notes = format_upkeep_notes(cards_before, cards_after, active)
                 if upkeep_notes:
-                    player = "P1" if state.active_player == 0 else "P2"
+                    player = "P1" if active == 0 else "P2"
                     print(f"{state.turn:<6} {player:<6} {'(upkeep)':<35} {state.life[0]:<8} {state.life[1]:<8} {upkeep_notes}")
                 continue
 
@@ -728,11 +734,15 @@ def cmd_goldfish(args):
                 state = end_turn(state)
                 continue
             if state.phase == "untap":
-                cards_before = get_card_states(state)
                 state = untap(state)
+                continue
+            if state.phase == "upkeep":
+                cards_before = get_card_states(state)
+                active = state.active_player
+                state = upkeep(state)
                 cards_after = get_card_states(state)
-                upkeep_notes = format_upkeep_notes(cards_before, cards_after, state.active_player)
-                if upkeep_notes and state.active_player == 0:
+                upkeep_notes = format_upkeep_notes(cards_before, cards_after, active)
+                if upkeep_notes and active == 0:
                     print(f"{p1_turn:<6} {'(upkeep)':<40} {state.life[1]:<6} {upkeep_notes}")
                     last_p1_turn_printed = p1_turn
                 continue

@@ -24,6 +24,19 @@ class SaprolingToken(Creature):
         self.eot_power_boost = 0
         self.eot_toughness_boost = 0
 
+    def get_signature_state(self) -> tuple:
+        """Return saproling-specific state including boosts."""
+        return (
+            self.name,
+            self.tapped,
+            self.entered_this_turn,
+            True,  # is_creature
+            self.attacking,
+            self.damage,
+            self.eot_power_boost,
+            self.eot_toughness_boost,
+        )
+
     def get_play_actions(self, state: 'GameState') -> List:
         """Tokens can't be played from hand."""
         return []

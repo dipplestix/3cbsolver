@@ -28,6 +28,32 @@ class RemoteFarm(Land):
         )
         self.depletion_counters = 2  # Enters with 2
 
+    def get_mana_output(self) -> int:
+        """Depletion lands produce 2 mana per tap."""
+        if self.depletion_counters > 0:
+            return 2
+        return 0
+
+    def tap_for_mana(self) -> int:
+        """Tap and remove a depletion counter. Returns mana produced."""
+        if self.tapped or self.depletion_counters <= 0:
+            return 0
+        self.tapped = True
+        self.depletion_counters -= 1
+        return 2
+
+    def should_sacrifice_after_tap(self) -> bool:
+        """Sacrifice if no depletion counters remain."""
+        return self.depletion_counters <= 0
+
+    def get_signature_state(self) -> tuple:
+        """Return farm-specific state including depletion counters."""
+        return (
+            self.name,
+            self.tapped,
+            self.depletion_counters,
+        )
+
     def get_play_actions(self, state: 'GameState') -> List[Action]:
         if state.active_player != self.owner:
             return []

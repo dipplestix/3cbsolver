@@ -68,35 +68,37 @@ def _get_attack_actions(state: 'GameState', player: int) -> List[Action]:
     # exploring equivalent permutations (e.g., "Sap1 attacks then Sap2" vs "Sap2 then Sap1")
     seen_attackers = set()
     for i, card in enumerate(state.battlefield[player]):
-        if isinstance(card, Creature) or isinstance(card, CreatureLand):
-            # Check if this creature can attack
-            if hasattr(card, 'can_attack') and not card.can_attack():
-                continue
-            if card.tapped:
-                continue
-            if getattr(card, 'attacking', False):
-                continue
-            if getattr(card, 'entered_this_turn', False):
-                continue
+        # Use is_creature() method for unified creature check
+        if not card.is_creature():
+            continue
+        # Check if this creature can attack
+        if hasattr(card, 'can_attack') and not card.can_attack():
+            continue
+        if card.tapped:
+            continue
+        if getattr(card, 'attacking', False):
+            continue
+        if getattr(card, 'entered_this_turn', False):
+            continue
 
-            # Create a signature for this creature type (include eot boosts for pumped creatures)
-            creature_sig = (card.name, getattr(card, 'power', 0), getattr(card, 'toughness', 0),
-                            getattr(card, 'plus_counters', 0), getattr(card, 'level', 0),
-                            getattr(card, 'eot_power_boost', 0), getattr(card, 'eot_toughness_boost', 0))
-            if creature_sig in seen_attackers:
-                continue  # Skip duplicate creature types
-            seen_attackers.add(creature_sig)
+        # Create a signature for this creature type (include eot boosts for pumped creatures)
+        creature_sig = (card.name, getattr(card, 'power', 0), getattr(card, 'toughness', 0),
+                        getattr(card, 'plus_counters', 0), getattr(card, 'level', 0),
+                        getattr(card, 'eot_power_boost', 0), getattr(card, 'eot_toughness_boost', 0))
+        if creature_sig in seen_attackers:
+            continue  # Skip duplicate creature types
+        seen_attackers.add(creature_sig)
 
-            # Generate attack action that picks this specific creature
-            def make_attack(card_idx):
-                def attack(s: 'GameState') -> 'GameState':
-                    ns = s.copy()
-                    attacker = ns.battlefield[player][card_idx]
-                    attacker.attacking = True
-                    attacker.tapped = True
-                    return ns
-                return attack
-            actions.append(Action(f"Attack with {card.name}", make_attack(i)))
+        # Generate attack action that picks this specific creature
+        def make_attack(card_idx):
+            def attack(s: 'GameState') -> 'GameState':
+                ns = s.copy()
+                attacker = ns.battlefield[player][card_idx]
+                attacker.attacking = True
+                attacker.tapped = True
+                return ns
+            return attack
+        actions.append(Action(f"Attack with {card.name}", make_attack(i)))
 
     # Always can choose not to attack
     def no_attack(s: 'GameState') -> 'GameState':
@@ -133,16 +135,13 @@ def _get_block_actions(state: 'GameState', player: int) -> List[Action]:
     assigned_blockers = set(state.blocking_assignments.values())
 
     for blocker_idx, blocker in enumerate(state.battlefield[defender]):
-        if not (isinstance(blocker, Creature) or isinstance(blocker, CreatureLand)):
+        # Use is_creature() method for unified creature check
+        if not blocker.is_creature():
             continue
         if blocker.tapped:
             continue
         if blocker_idx in assigned_blockers:
             continue  # Already blocking
-
-        # Check if creature (CreatureLand needs is_creature check)
-        if isinstance(blocker, CreatureLand) and not blocker.is_creature:
-            continue
 
         blocker_sig = (blocker.name, getattr(blocker, 'power', 0), getattr(blocker, 'toughness', 0),
                        getattr(blocker, 'plus_counters', 0), getattr(blocker, 'level', 0),

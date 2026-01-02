@@ -37,6 +37,28 @@ class BottomlessVault(Land):
         self.storage_counters = 0
         self.stay_tapped = True  # Whether to skip untapping
 
+    def get_mana_output(self) -> int:
+        """Storage lands produce mana equal to storage counters."""
+        return self.storage_counters
+
+    def tap_for_mana(self) -> int:
+        """Tap and release all storage counters. Returns mana produced."""
+        if self.tapped:
+            return 0
+        mana = self.storage_counters
+        self.storage_counters = 0
+        self.tapped = True
+        return mana
+
+    def get_signature_state(self) -> tuple:
+        """Return vault-specific state including storage counters and stay_tapped flag."""
+        return (
+            self.name,
+            self.tapped,
+            self.storage_counters,
+            self.stay_tapped,
+        )
+
     def get_play_actions(self, state: 'GameState') -> List[Action]:
         if state.active_player != self.owner:
             return []

@@ -33,6 +33,18 @@ class StromkirkNoble(Creature):
         self.plus_counters = 0  # +1/+1 counters
         self.cant_be_blocked_by = ['Human']
 
+    def get_signature_state(self) -> tuple:
+        """Return noble-specific state including +1/+1 counters."""
+        return (
+            self.name,
+            self.tapped,
+            self.entered_this_turn,
+            True,  # is_creature
+            self.attacking,
+            self.damage,
+            self.plus_counters,
+        )
+
     @property
     def current_power(self) -> int:
         return self.power + self.plus_counters

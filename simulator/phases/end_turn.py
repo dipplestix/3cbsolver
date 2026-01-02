@@ -34,7 +34,7 @@ def end_turn(state: 'GameState') -> 'GameState':
     # Call on_end_turn for creature lands (reset creature status)
     for card in ns.battlefield[ns.active_player]:
         if isinstance(card, CreatureLand):
-            card.is_creature = False
+            card._is_creature = False
             card.damage = 0
             card.attacking = False
 
