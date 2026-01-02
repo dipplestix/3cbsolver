@@ -3,9 +3,9 @@ from .game_state import GameState
 from .solver import (
     solve,
     find_optimal_line,
-    get_available_actions,
     minimax,
 )
+from .actions import get_available_actions
 from .tables import (
     lookup_transposition,
     store_transposition,
