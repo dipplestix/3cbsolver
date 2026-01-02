@@ -119,29 +119,36 @@ class LuminarchAspirant(Creature):
             if hasattr(card, 'power'):
                 creatures.append(card)
 
-        # If Aspirant is the only creature, auto-apply trigger to itself
-        # This reduces branching since it's always optimal
+        # If Aspirant is the only creature, auto-apply trigger (no choice needed)
         if len(creatures) == 1 and creatures[0].name == self.name:
-            # Return empty - the trigger will be auto-applied in the attack action
-            return []
+            def buff_self(s: 'GameState') -> 'GameState':
+                ns = s.copy()
+                for c in ns.battlefield[self.owner]:
+                    if c.name == self.name and isinstance(c, LuminarchAspirant):
+                        c.combat_trigger_used = True
+                        c.plus_counters += 1
+                        break
+                return ns
+            # Return single mandatory action - solver will take it automatically
+            return [Action("Aspirant: +1/+1 on self", buff_self)]
 
+        # Multiple creatures - offer choices, but it's a mandatory trigger
+        # so we ONLY return trigger actions (not attack actions)
+        # The attack phase will be handled after trigger resolves
         actions = []
-        # Deduplicate identical creatures (e.g., multiple Saprolings) to reduce branching
         seen_names = set()
         for card in creatures:
             if card.name in seen_names:
-                continue  # Skip duplicates
+                continue
             seen_names.add(card.name)
 
             def make_buff_action(creature_name):
                 def buff_creature(s: 'GameState') -> 'GameState':
                     ns = s.copy()
-                    # Mark trigger as used
                     for c in ns.battlefield[self.owner]:
                         if c.name == self.name and isinstance(c, LuminarchAspirant):
                             c.combat_trigger_used = True
                             break
-                    # Add counter to target
                     for c in ns.battlefield[self.owner]:
                         if c.name == creature_name:
                             if hasattr(c, 'plus_counters'):

@@ -280,8 +280,14 @@ def get_available_actions(state: GameState) -> List[Action]:
 
     elif state.phase == "combat_attack":
         # Collect battlefield actions for active player (e.g., Luminarch Aspirant trigger)
+        # These are treated as mandatory - if any exist, ONLY offer them (not attack actions)
+        # Attack actions will be offered after triggers resolve
         for card in state.battlefield[player]:
             actions.extend(card.get_battlefield_actions(state))
+
+        # If there are trigger actions, only offer those (triggers are mandatory)
+        if actions:
+            return actions
 
         # Collect attack actions, deduplicating identical creatures
         # Only generate one "Attack with X" action per creature type to avoid
@@ -307,21 +313,16 @@ def get_available_actions(state: GameState) -> List[Action]:
                     continue  # Skip duplicate creature types
                 seen_attackers.add(creature_sig)
 
-                # Use creature's custom attack actions if provided (e.g., Luminarch Aspirant)
-                creature_attack_actions = card.get_attack_actions(state)
-                if creature_attack_actions:
-                    actions.extend(creature_attack_actions)
-                else:
-                    # Generate generic attack action
-                    def make_attack(card_idx):
-                        def attack(s: GameState) -> GameState:
-                            ns = s.copy()
-                            attacker = ns.battlefield[player][card_idx]
-                            attacker.attacking = True
-                            attacker.tapped = True
-                            return ns
-                        return attack
-                    actions.append(Action(f"Attack with {card.name}", make_attack(i)))
+                # Generate attack action that picks this specific creature
+                def make_attack(card_idx):
+                    def attack(s: GameState) -> GameState:
+                        ns = s.copy()
+                        attacker = ns.battlefield[player][card_idx]
+                        attacker.attacking = True
+                        attacker.tapped = True
+                        return ns
+                    return attack
+                actions.append(Action(f"Attack with {card.name}", make_attack(i)))
 
         # Always can choose not to attack
         def no_attack(s: GameState) -> GameState:
@@ -704,41 +705,35 @@ def minimax(state: GameState, player: int, memo: Dict = None, depth: int = 0,
             return -1
         return 0
 
-    # Early heuristic for grinding games (both hands empty, creatures vs creatures)
-    # This applies sooner to avoid timeout on long grinding matchups
-    if depth > 50 and not state.hands[0] and not state.hands[1]:
-        p1_creatures = [c for c in state.battlefield[0] if hasattr(c, 'power') and c.power > 0]
-        p2_creatures = [c for c in state.battlefield[1] if hasattr(c, 'power') and c.power > 0]
-
+    # Early heuristic for grinding games with token generators
+    # Token generator vs static creature is mathematically determined
+    if depth > 30 and not state.hands[0] and not state.hands[1]:
         def has_token_gen(bf):
             return any(c.name == 'Thallid' for c in bf)
 
         def can_grow(creatures):
             for c in creatures:
-                # Check if creature actively grows (has combat trigger like Aspirant)
-                # or has level-up ability (Student of Warfare)
-                if hasattr(c, 'combat_trigger_used'):  # Luminarch Aspirant - auto-grows
+                if hasattr(c, 'plus_counters'):  # Aspirant, landfall creatures
                     return True
                 if hasattr(c, 'level'):  # Student of Warfare
                     return True
+                # Stromkirk Noble grows when dealing combat damage
+                if c.name == 'Stromkirk Noble':
+                    return True
             return False
 
+        p1_creatures = [c for c in state.battlefield[0] if hasattr(c, 'power') and c.power > 0]
+        p2_creatures = [c for c in state.battlefield[1] if hasattr(c, 'power') and c.power > 0]
         p1_token_gen = has_token_gen(state.battlefield[0])
         p2_token_gen = has_token_gen(state.battlefield[1])
         p1_grows = can_grow(p1_creatures)
         p2_grows = can_grow(p2_creatures)
 
-        # Growing creature beats token generator (quadratic damage vs linear blockers)
-        if p1_grows and not p1_token_gen and p2_token_gen and not p2_grows:
-            return 1 if player == 0 else -1
-        if p2_grows and not p2_token_gen and p1_token_gen and not p1_grows:
-            return 1 if player == 1 else -1
-
-        # Token generator beats static creature (infinite tokens eventually overwhelm)
-        if p1_token_gen and not p2_token_gen and not p2_grows and p2_creatures:
-            return 1 if player == 0 else -1
+        # Token generator beats static creature (infinite tokens overwhelm)
         if p2_token_gen and not p1_token_gen and not p1_grows and p1_creatures:
             return 1 if player == 1 else -1
+        if p1_token_gen and not p2_token_gen and not p2_grows and p2_creatures:
+            return 1 if player == 0 else -1
 
     # Depth limit / repetition check - apply heuristics at max depth
     if depth > 500:
@@ -760,9 +755,7 @@ def minimax(state: GameState, player: int, memo: Dict = None, depth: int = 0,
 
             def can_grow(creatures):
                 for c in creatures:
-                    # Check if creature actively grows (has combat trigger like Aspirant)
-                    # or has level-up ability (Student of Warfare)
-                    if hasattr(c, 'combat_trigger_used'):  # Luminarch Aspirant - auto-grows
+                    if hasattr(c, 'plus_counters'):  # Aspirant, landfall creatures
                         return True
                     if hasattr(c, 'level'):  # Student of Warfare
                         return True
