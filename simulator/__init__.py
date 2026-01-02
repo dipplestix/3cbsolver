@@ -5,6 +5,8 @@ from .solver import (
     find_optimal_line,
     get_available_actions,
     minimax,
+)
+from .tables import (
     lookup_transposition,
     store_transposition,
     check_dominance,
