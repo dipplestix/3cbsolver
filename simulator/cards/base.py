@@ -12,6 +12,9 @@ class CardType(Enum):
     LAND = auto()
     CREATURE = auto()
     ARTIFACT = auto()
+    ENCHANTMENT = auto()
+    INSTANT = auto()
+    SORCERY = auto()
 
 
 @dataclass
@@ -52,6 +55,10 @@ class Card(ABC):
         """Block actions during combat."""
         return []
 
+    def get_response_actions(self, state: 'GameState') -> List[Action]:
+        """Actions available when responding to a spell on the stack."""
+        return []
+
     def on_upkeep(self, state: 'GameState') -> 'GameState':
         """Called at the beginning of owner's upkeep."""
         return state
@@ -63,6 +70,17 @@ class Card(ABC):
     def is_creature(self) -> bool:
         """Return True if this card is currently a creature."""
         return False
+
+    def is_land(self) -> bool:
+        """Return True if this card is a land."""
+        return False
+
+    def get_mana_value(self) -> int:
+        """Calculate total mana value (CMC) of this card."""
+        total = getattr(self, 'generic_cost', 0)
+        color_costs = getattr(self, 'color_costs', {})
+        total += sum(color_costs.values())
+        return total
 
     def get_mana_output(self) -> int:
         """Return how much mana this card produces when tapped."""

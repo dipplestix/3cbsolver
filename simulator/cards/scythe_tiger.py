@@ -33,8 +33,7 @@ class ScytheTiger(Creature):
             owner=owner,
             power=3,
             toughness=2,
-            mana_cost=1,
-            mana_color='G',
+            color_costs={'G': 1},
             keywords=['shroud']
         )
         self.sacrificed_land = False
@@ -60,7 +59,10 @@ class ScytheTiger(Creature):
             return []
 
         def cast(s: 'GameState') -> 'GameState':
-            ns = s.copy()
+            # Pay 1 green mana
+            ns = s.pay_mana(self.owner, 'G', 1)
+
+            # Move tiger from hand to battlefield
             for i, card in enumerate(ns.hands[self.owner]):
                 if card.name == self.name:
                     tiger = ns.hands[self.owner].pop(i)
@@ -68,11 +70,7 @@ class ScytheTiger(Creature):
                     ns.battlefield[self.owner].append(tiger)
                     break
 
-            for card in ns.battlefield[self.owner]:
-                if hasattr(card, 'mana_produced') and card.mana_produced == 'G' and not card.tapped:
-                    card.tapped = True
-                    break
-
+            # Sacrifice a land (ETB trigger)
             for i, card in enumerate(ns.battlefield[self.owner]):
                 if isinstance(card, (Land, CreatureLand)):
                     sacrificed = ns.battlefield[self.owner].pop(i)

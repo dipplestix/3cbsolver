@@ -1,10 +1,10 @@
 """Card definitions for the 3CB simulator."""
 from .base import Card, Action, CardType
-from .land import Land, CreatureLand, create_island, create_forest, create_plains
+from .land import Land, CreatureLand, create_island, create_forest, create_plains, create_swamp
 from .mountain import Mountain, create_mountain
 from .hammerheim import Hammerheim, create_hammerheim
 from .creature import Creature
-from .artifact import Artifact, create_mox_jet
+from .artifact import Artifact, create_mox_jet, create_mox_pearl
 from .mutavault import create_mutavault
 from .sleep_cursed_faerie import SleepCursedFaerie, create_sleep_cursed_faerie
 from .scythe_tiger import ScytheTiger, create_scythe_tiger
@@ -24,15 +24,36 @@ from .luminarch_aspirant import LuminarchAspirant, create_luminarch_aspirant
 from .thallid import Thallid, create_thallid
 from .saproling_token import SaprolingToken, create_saproling_token
 from .pendelhaven import Pendelhaven, create_pendelhaven
+from .enchantment import Enchantment
+from .shrieking_affliction import ShriekingAffliction, create_shrieking_affliction
+from .crystal_vein import CrystalVein, create_crystal_vein
+from .soldier_token import SoldierToken, create_soldier_token
+from .soldier_military_program import SoldierMilitaryProgram, create_soldier_military_program
+from .sorcery import Sorcery
+from .instant import Instant
+from .inquisition_of_kozilek import InquisitionOfKozilek
+from .mental_misstep import MentalMisstep
+
+
+def create_inquisition_of_kozilek(owner: int) -> InquisitionOfKozilek:
+    """Factory function for Inquisition of Kozilek."""
+    return InquisitionOfKozilek(owner)
+
+
+def create_mental_misstep(owner: int) -> MentalMisstep:
+    """Factory function for Mental Misstep."""
+    return MentalMisstep(owner)
 
 __all__ = [
     # Base classes
     'Card', 'Action', 'CardType',
-    'Land', 'CreatureLand', 'Creature', 'Artifact',
+    'Land', 'CreatureLand', 'Creature', 'Artifact', 'Enchantment',
+    'Sorcery', 'Instant',
     # Factory functions
-    'create_island', 'create_forest', 'create_plains', 'create_mountain',
+    'create_island', 'create_forest', 'create_plains', 'create_swamp', 'create_mountain',
     'create_hammerheim',
-    'create_mox_jet', 'create_mutavault',
+    'create_mox_jet', 'create_mox_pearl', 'create_mutavault',
+    'create_crystal_vein', 'create_soldier_token', 'create_soldier_military_program',
     'create_sleep_cursed_faerie', 'create_scythe_tiger',
     'create_undiscovered_paradise', 'create_sazhs_chocobo',
     'create_student_of_warfare', 'create_old_growth_dryads',
@@ -41,10 +62,14 @@ __all__ = [
     'create_bottomless_vault', 'create_tomb_of_urami', 'create_urami_token',
     'create_remote_farm', 'create_luminarch_aspirant',
     'create_thallid', 'create_saproling_token', 'create_pendelhaven',
+    'create_shrieking_affliction',
+    'create_inquisition_of_kozilek', 'create_mental_misstep',
     # Card classes (for type checking)
     'Mountain', 'Hammerheim', 'SleepCursedFaerie', 'ScytheTiger',
     'UndiscoveredParadise', 'SazhsChocobo', 'StudentOfWarfare',
     'OldGrowthDryads', 'DryadArbor', 'DragonSniper', 'StromkirkNoble',
     'HeartfireHero', 'BottomlessVault', 'TombOfUrami', 'UramiToken',
     'RemoteFarm', 'LuminarchAspirant', 'Thallid', 'SaprolingToken', 'Pendelhaven',
+    'ShriekingAffliction', 'CrystalVein', 'SoldierToken', 'SoldierMilitaryProgram',
+    'InquisitionOfKozilek', 'MentalMisstep',
 ]

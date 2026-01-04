@@ -7,7 +7,7 @@ def create_mutavault(owner: int) -> CreatureLand:
     return CreatureLand(
         name="Mutavault",
         owner=owner,
-        mana_produced='1',
+        mana_produced='C',
         activation_cost=1,
         creature_power=2,
         creature_toughness=2,

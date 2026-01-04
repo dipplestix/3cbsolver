@@ -12,9 +12,12 @@ class GameState:
 
     life: List[int] = field(default_factory=lambda: [20, 20])
     hands: List[List['Card']] = field(default_factory=lambda: [[], []])
+    library: List[List['Card']] = field(default_factory=lambda: [[], []])
     battlefield: List[List['Card']] = field(default_factory=lambda: [[], []])
     artifacts: List[List['Card']] = field(default_factory=lambda: [[], []])
+    enchantments: List[List['Card']] = field(default_factory=lambda: [[], []])
     graveyard: List[List['Card']] = field(default_factory=lambda: [[], []])
+    stack: List['Card'] = field(default_factory=list)
 
     active_player: int = 0
     phase: str = "main1"  # untap, upkeep, main1, combat_attack, combat_block, combat_damage, end_turn
@@ -28,21 +31,30 @@ class GameState:
     game_over: bool = False
     winner: Optional[int] = None  # None = draw, 0 or 1 = that player wins
 
+    # Stalemate detection - draw if board unchanged for too many turns
+    stale_turns: int = 0
+    prev_main_sig: Optional[tuple] = None
+
     def copy(self) -> 'GameState':
         """Create a deep copy of this state."""
         return GameState(
             life=self.life.copy(),
             hands=[[c.copy() for c in self.hands[0]], [c.copy() for c in self.hands[1]]],
+            library=[[c.copy() for c in self.library[0]], [c.copy() for c in self.library[1]]],
             battlefield=[[c.copy() for c in self.battlefield[0]], [c.copy() for c in self.battlefield[1]]],
             artifacts=[[c.copy() for c in self.artifacts[0]], [c.copy() for c in self.artifacts[1]]],
+            enchantments=[[c.copy() for c in self.enchantments[0]], [c.copy() for c in self.enchantments[1]]],
             graveyard=[[c.copy() for c in self.graveyard[0]], [c.copy() for c in self.graveyard[1]]],
+            stack=[c.copy() for c in self.stack],
             active_player=self.active_player,
             phase=self.phase,
             turn=self.turn,
             land_played_this_turn=self.land_played_this_turn,
             blocking_assignments=self.blocking_assignments.copy(),
             game_over=self.game_over,
-            winner=self.winner
+            winner=self.winner,
+            stale_turns=self.stale_turns,
+            prev_main_sig=self.prev_main_sig
         )
 
     def get_available_mana(self, player: int) -> int:
@@ -85,18 +97,22 @@ class GameState:
         ns = self.copy()
         remaining = amount
 
-        # Get lands of the right color that can produce mana
-        lands = [c for c in ns.battlefield[player]
-                 if hasattr(c, 'mana_produced') and c.mana_produced == color and not c.tapped]
+        # Collect all mana sources of the right color (battlefield and artifacts)
+        mana_sources = []
+        for card in ns.battlefield[player]:
+            if hasattr(card, 'mana_produced') and card.mana_produced == color and not card.tapped:
+                # Skip creature lands with summoning sickness
+                if card.is_creature() and getattr(card, 'entered_this_turn', False):
+                    continue
+                mana_sources.append(('battlefield', card))
+        for card in ns.artifacts[player]:
+            if hasattr(card, 'mana_produced') and card.mana_produced == color and not card.tapped:
+                mana_sources.append(('artifact', card))
 
         to_sacrifice = []
-        for card in lands:
+        for zone, card in mana_sources:
             if remaining <= 0:
                 break
-
-            # Skip creature lands with summoning sickness
-            if card.is_creature() and getattr(card, 'entered_this_turn', False):
-                continue
 
             # Use card-driven mana production
             mana_produced = card.tap_for_mana()
@@ -104,11 +120,62 @@ class GameState:
 
             # Check if card should be sacrificed after tapping
             if card.should_sacrifice_after_tap():
-                to_sacrifice.append(card)
+                to_sacrifice.append((zone, card))
 
         # Handle sacrifices
-        for card in to_sacrifice:
-            ns.battlefield[player].remove(card)
+        for zone, card in to_sacrifice:
+            if zone == 'battlefield':
+                ns.battlefield[player].remove(card)
+            else:
+                ns.artifacts[player].remove(card)
+            ns.graveyard[player].append(card)
+
+        return ns
+
+    def pay_generic_mana(self, player: int, amount: int) -> 'GameState':
+        """Pay generic mana cost using any available mana (including colorless 'C').
+
+        Prioritizes colorless mana first, then uses other colors.
+        """
+        ns = self.copy()
+        remaining = amount
+
+        # Collect all untapped mana sources
+        mana_sources = []
+
+        # Lands on battlefield
+        for card in ns.battlefield[player]:
+            if hasattr(card, 'mana_produced') and card.mana_produced and not card.tapped:
+                # Skip creature lands with summoning sickness
+                if card.is_creature() and getattr(card, 'entered_this_turn', False):
+                    continue
+                mana_sources.append(('battlefield', card))
+
+        # Artifacts
+        for card in ns.artifacts[player]:
+            if hasattr(card, 'mana_produced') and card.mana_produced and not card.tapped:
+                mana_sources.append(('artifact', card))
+
+        # Sort to prioritize colorless ('C') first - use colorless before colored mana
+        mana_sources.sort(key=lambda x: (0 if x[1].mana_produced == 'C' else 1))
+
+        to_sacrifice = []
+        for zone, card in mana_sources:
+            if remaining <= 0:
+                break
+
+            mana_produced = card.tap_for_mana()
+            remaining -= mana_produced
+
+            if card.should_sacrifice_after_tap():
+                to_sacrifice.append((zone, card))
+
+        # Handle sacrifices
+        for zone, card in to_sacrifice:
+            if zone == 'battlefield':
+                ns.battlefield[player].remove(card)
+            else:
+                ns.artifacts[player].remove(card)
             ns.graveyard[player].append(card)
 
         return ns
@@ -142,8 +209,14 @@ class GameState:
         p2_bf = tuple(sorted(c.get_signature_state() for c in self.battlefield[1]))
         p1_art = tuple(sorted(c.get_signature_state() for c in self.artifacts[0]))
         p2_art = tuple(sorted(c.get_signature_state() for c in self.artifacts[1]))
+        p1_ench = tuple(sorted(c.get_signature_state() for c in self.enchantments[0]))
+        p2_ench = tuple(sorted(c.get_signature_state() for c in self.enchantments[1]))
         # Include blocking assignments for combat phases
         blocking = tuple(sorted(self.blocking_assignments.items()))
+        # Library sizes (not contents - order matters and would be too expensive)
+        lib_sizes = (len(self.library[0]), len(self.library[1]))
+        # Stack contents (order matters, include full signature)
+        stack_sig = tuple(c.get_signature_state() for c in self.stack)
         return (
             tuple(self.life),
             self.active_player,
@@ -151,7 +224,10 @@ class GameState:
             p1_hand, p2_hand,
             p1_bf, p2_bf,
             p1_art, p2_art,
-            blocking
+            p1_ench, p2_ench,
+            blocking,
+            lib_sizes,
+            stack_sig
         )
 
     def board_signature(self) -> tuple:
@@ -169,12 +245,19 @@ class GameState:
         p2_bf = tuple(sorted(c.get_signature_state() for c in self.battlefield[1]))
         p1_art = tuple(sorted(c.get_signature_state() for c in self.artifacts[0]))
         p2_art = tuple(sorted(c.get_signature_state() for c in self.artifacts[1]))
+        p1_ench = tuple(sorted(c.get_signature_state() for c in self.enchantments[0]))
+        p2_ench = tuple(sorted(c.get_signature_state() for c in self.enchantments[1]))
         blocking = tuple(sorted(self.blocking_assignments.items()))
+        lib_sizes = (len(self.library[0]), len(self.library[1]))
+        stack_sig = tuple(c.get_signature_state() for c in self.stack)
         return (
             self.active_player,
             self.land_played_this_turn,
             p1_hand, p2_hand,
             p1_bf, p2_bf,
             p1_art, p2_art,
-            blocking
+            p1_ench, p2_ench,
+            blocking,
+            lib_sizes,
+            stack_sig
         )

@@ -1,5 +1,5 @@
 """Creature base class for the 3CB simulator."""
-from typing import List, Optional, TYPE_CHECKING
+from typing import List, Optional, Dict, TYPE_CHECKING
 
 from .base import Card, Action, CardType
 
@@ -11,14 +11,22 @@ class Creature(Card):
     """A creature card with power and toughness."""
 
     def __init__(self, name: str, owner: int, power: int, toughness: int,
-                 mana_cost: int = 0, mana_color: str = '',
+                 color_costs: Optional[Dict[str, int]] = None,
+                 generic_cost: int = 0,
                  keywords: Optional[List[str]] = None,
                  creature_types: Optional[List[str]] = None):
+        """Initialize creature.
+
+        Args:
+            color_costs: Dict of colored mana required, e.g. {'W': 1} for {W},
+                        {'W': 2} for {W}{W}, {'B': 1, 'G': 1} for {B}{G}
+            generic_cost: Generic mana required (can be paid with any color)
+        """
         super().__init__(name, owner)
         self.power = power
         self.toughness = toughness
-        self.mana_cost = mana_cost
-        self.mana_color = mana_color
+        self.color_costs = color_costs or {}  # e.g., {'W': 1} or {'B': 1, 'G': 1}
+        self.generic_cost = generic_cost
         self.keywords = keywords or []
         self.creature_types = creature_types or []  # e.g., ['Vampire', 'Noble'], ['Human', 'Soldier']
         self.damage = 0
@@ -77,29 +85,39 @@ class Creature(Card):
         if state.phase != "main1":
             return []
 
-        if self.mana_color:
-            available = state.get_available_mana_by_color(self.owner)
-            if available.get(self.mana_color, 0) < self.mana_cost:
+        # Calculate total mana needed
+        total_colored = sum(self.color_costs.values())
+        total_needed = total_colored + self.generic_cost
+
+        # Check total mana available
+        if state.get_available_mana(self.owner) < total_needed:
+            return []
+
+        # Check each color requirement
+        available = state.get_available_mana_by_color(self.owner)
+        for color, amount in self.color_costs.items():
+            if available.get(color, 0) < amount:
                 return []
-        else:
-            if state.get_available_mana(self.owner) < self.mana_cost:
-                return []
+
+        # Capture costs for closure
+        color_costs = self.color_costs.copy()
+        generic_cost = self.generic_cost
 
         def cast(s: 'GameState') -> 'GameState':
             ns = s.copy()
+            # Move card from hand to battlefield
             for i, card in enumerate(ns.hands[self.owner]):
                 if card.name == self.name:
                     card_copy = ns.hands[self.owner].pop(i)
                     card_copy.entered_this_turn = True
                     ns.battlefield[self.owner].append(card_copy)
                     break
-            if self.mana_color:
-                for card in ns.battlefield[self.owner]:
-                    if (hasattr(card, 'mana_produced') and
-                        card.mana_produced == self.mana_color and
-                        not card.tapped):
-                        card.tapped = True
-                        break
+            # Pay each colored cost
+            for color, amount in color_costs.items():
+                ns = ns.pay_mana(self.owner, color, amount)
+            # Pay generic cost
+            if generic_cost > 0:
+                ns = ns.pay_generic_mana(self.owner, generic_cost)
             return ns
 
         return [Action(f"Cast {self.name}", cast)]
@@ -166,8 +184,10 @@ class Creature(Card):
     def copy(self) -> 'Creature':
         new_creature = Creature(
             self.name, self.owner, self.power, self.toughness,
-            self.mana_cost, self.mana_color, self.keywords.copy(),
-            self.creature_types.copy()
+            color_costs=self.color_costs.copy(),
+            generic_cost=self.generic_cost,
+            keywords=self.keywords.copy(),
+            creature_types=self.creature_types.copy()
         )
         new_creature.tapped = self.tapped
         new_creature.damage = self.damage

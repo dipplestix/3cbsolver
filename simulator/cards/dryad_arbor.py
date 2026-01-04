@@ -26,13 +26,23 @@ class DryadArbor(Creature):
             owner=owner,
             power=1,
             toughness=1,
-            mana_cost=0,  # It's a land, no mana cost
-            mana_color=None,
+            # No mana cost - it's a land, not a spell
             keywords=[]
         )
         self.card_type = CardType.LAND  # It's also a land
         self.mana_produced = 'G'
         self.is_land = True
+
+    def get_mana_output(self) -> int:
+        """Dryad Arbor produces 1 green mana."""
+        return 1
+
+    def tap_for_mana(self) -> int:
+        """Tap for 1 green mana."""
+        if self.tapped:
+            return 0
+        self.tapped = True
+        return 1
 
     def get_play_actions(self, state: 'GameState') -> List[Action]:
         """Play as a land (uses land drop, not a spell)."""

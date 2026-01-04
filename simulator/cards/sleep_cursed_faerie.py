@@ -35,8 +35,7 @@ class SleepCursedFaerie(Creature):
             owner=owner,
             power=3,
             toughness=3,
-            mana_cost=1,
-            mana_color='U',
+            color_costs={'U': 1},
             keywords=['flying']
         )
         self.stun_counters = 3
@@ -57,7 +56,9 @@ class SleepCursedFaerie(Creature):
             return []
 
         def cast(s: 'GameState') -> 'GameState':
-            ns = s.copy()
+            # Pay 1 blue mana
+            ns = s.pay_mana(self.owner, 'U', 1)
+            # Move faerie from hand to battlefield
             for i, card in enumerate(ns.hands[self.owner]):
                 if card.name == self.name:
                     faerie = ns.hands[self.owner].pop(i)
@@ -65,10 +66,6 @@ class SleepCursedFaerie(Creature):
                     faerie.stun_counters = 3
                     faerie.entered_this_turn = True
                     ns.battlefield[self.owner].append(faerie)
-                    break
-            for card in ns.battlefield[self.owner]:
-                if hasattr(card, 'mana_produced') and card.mana_produced == 'U' and not card.tapped:
-                    card.tapped = True
                     break
             return ns
 
