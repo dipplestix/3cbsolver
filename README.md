@@ -61,6 +61,10 @@ python cli.py list
 | `student` | Plains + Student of Warfare |
 | `scf` | Island + Sleep-Cursed Faerie |
 | `tiger` | Forest + Scythe Tiger |
+| `noble` | Mountain + Stromkirk Noble |
+| `hero` | Mountain + Hammerheim + Heartfire Hero |
+| `sniper` | Mountain + Dragon Sniper |
+| `mutavault` | Mutavault |
 
 ## Architecture
 
