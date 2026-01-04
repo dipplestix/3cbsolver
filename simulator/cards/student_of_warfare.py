@@ -35,8 +35,7 @@ class StudentOfWarfare(Creature):
             owner=owner,
             power=1,
             toughness=1,
-            mana_cost=1,
-            mana_color='W',
+            color_costs={'W': 1},
             keywords=[],
             creature_types=['Human', 'Knight']
         )
@@ -100,16 +99,8 @@ class StudentOfWarfare(Creature):
             if not student_found:
                 break
 
-            # Tap a white mana source
-            mana_tapped = False
-            for card in ns.battlefield[self.owner]:
-                if hasattr(card, 'mana_produced') and card.mana_produced == 'W' and not card.tapped:
-                    card.tapped = True
-                    mana_tapped = True
-                    break
-
-            if not mana_tapped:
-                break
+            # Pay 1 white mana for level up
+            ns = ns.pay_mana(self.owner, 'W', 1)
 
         return ns
 
@@ -124,16 +115,14 @@ class StudentOfWarfare(Creature):
             return []
 
         def cast(s: 'GameState') -> 'GameState':
-            ns = s.copy()
+            # Pay 1 white mana
+            ns = s.pay_mana(self.owner, 'W', 1)
+            # Move student from hand to battlefield
             for i, card in enumerate(ns.hands[self.owner]):
                 if card.name == self.name:
                     student = ns.hands[self.owner].pop(i)
                     student.entered_this_turn = True
                     ns.battlefield[self.owner].append(student)
-                    break
-            for card in ns.battlefield[self.owner]:
-                if hasattr(card, 'mana_produced') and card.mana_produced == 'W' and not card.tapped:
-                    card.tapped = True
                     break
             return ns
 

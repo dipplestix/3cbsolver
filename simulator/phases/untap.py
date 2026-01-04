@@ -48,6 +48,11 @@ def untap(state: 'GameState') -> 'GameState':
     for card in ns.artifacts[ns.active_player]:
         card.tapped = False
 
+    # Reset combat triggers on enchantments
+    for card in ns.enchantments[ns.active_player]:
+        if hasattr(card, 'combat_trigger_used'):
+            card.combat_trigger_used = False
+
     # Move to upkeep phase
     ns.phase = "upkeep"
 

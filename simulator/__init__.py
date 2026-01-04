@@ -29,10 +29,13 @@ from .heuristics import (
 from .phases import untap, upkeep, end_turn
 from .cards import (
     Card, Action, CardType,
-    Land, CreatureLand, Creature, Artifact,
-    create_island, create_forest, create_plains, create_mountain,
+    Land, CreatureLand, Creature, Artifact, Enchantment,
+    create_island, create_forest, create_plains, create_swamp, create_mountain,
     create_hammerheim,
-    create_mox_jet, create_mutavault,
+    create_mox_jet, create_mox_pearl, create_mutavault,
+    CrystalVein, create_crystal_vein,
+    SoldierToken, create_soldier_token,
+    SoldierMilitaryProgram, create_soldier_military_program,
     SleepCursedFaerie, create_sleep_cursed_faerie,
     ScytheTiger, create_scythe_tiger,
     UndiscoveredParadise, create_undiscovered_paradise,
@@ -51,6 +54,7 @@ from .cards import (
     Thallid, create_thallid,
     SaprolingToken, create_saproling_token,
     Pendelhaven, create_pendelhaven,
+    ShriekingAffliction, create_shrieking_affliction,
 )
 
 __all__ = [
@@ -71,11 +75,12 @@ __all__ = [
     'end_turn', 'upkeep', 'untap',
     # Base classes
     'Card', 'Action', 'CardType',
-    'Land', 'CreatureLand', 'Creature', 'Artifact',
+    'Land', 'CreatureLand', 'Creature', 'Artifact', 'Enchantment',
     # Factory functions
-    'create_island', 'create_forest', 'create_plains', 'create_mountain',
+    'create_island', 'create_forest', 'create_plains', 'create_swamp', 'create_mountain',
     'create_hammerheim',
-    'create_mox_jet', 'create_mutavault',
+    'create_mox_jet', 'create_mox_pearl', 'create_mutavault',
+    'create_crystal_vein', 'create_soldier_token', 'create_soldier_military_program',
     'create_sleep_cursed_faerie', 'create_scythe_tiger',
     'create_undiscovered_paradise', 'create_sazhs_chocobo',
     'create_student_of_warfare', 'create_old_growth_dryads',
@@ -84,10 +89,12 @@ __all__ = [
     'create_bottomless_vault', 'create_tomb_of_urami', 'create_urami_token',
     'create_remote_farm', 'create_luminarch_aspirant',
     'create_thallid', 'create_saproling_token', 'create_pendelhaven',
+    'create_shrieking_affliction',
     # Card classes
     'Mountain', 'Hammerheim', 'SleepCursedFaerie', 'ScytheTiger',
     'UndiscoveredParadise', 'SazhsChocobo', 'StudentOfWarfare',
     'OldGrowthDryads', 'DryadArbor', 'DragonSniper', 'StromkirkNoble',
     'HeartfireHero', 'BottomlessVault', 'TombOfUrami', 'UramiToken',
     'RemoteFarm', 'LuminarchAspirant', 'Thallid', 'SaprolingToken', 'Pendelhaven',
+    'ShriekingAffliction', 'CrystalVein', 'SoldierToken', 'SoldierMilitaryProgram',
 ]

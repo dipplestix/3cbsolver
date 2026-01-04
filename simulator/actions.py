@@ -25,6 +25,9 @@ def get_available_actions(state: 'GameState') -> List[Action]:
     elif state.phase == "combat_block":
         actions = _get_block_actions(state, player)
 
+    elif state.phase == "response":
+        actions = _get_response_actions(state)
+
     return actions
 
 
@@ -43,6 +46,10 @@ def _get_main_phase_actions(state: 'GameState', player: int) -> List[Action]:
     # Always can pass to combat
     def pass_to_combat(s: 'GameState') -> 'GameState':
         ns = s.copy()
+        # Auto-level creatures before combat (uses any mana gained from land drops this turn)
+        for card in ns.battlefield[player]:
+            if hasattr(card, 'auto_level') and card.auto_level:
+                ns = card.do_auto_level(ns)
         ns.phase = "combat_attack"
         return ns
     actions.append(Action("Pass to Combat", pass_to_combat))
@@ -51,7 +58,12 @@ def _get_main_phase_actions(state: 'GameState', player: int) -> List[Action]:
 
 
 def _get_attack_actions(state: 'GameState', player: int) -> List[Action]:
-    """Get actions available during combat attack phase."""
+    """Get actions available during combat attack phase.
+
+    Generates all combinations of attackers as single actions (2^n for n unique creatures).
+    Each action immediately transitions to the next phase.
+    """
+    from itertools import combinations as itertools_combinations
     actions = []
 
     # Collect battlefield actions for active player (e.g., Luminarch Aspirant trigger)
@@ -63,10 +75,10 @@ def _get_attack_actions(state: 'GameState', player: int) -> List[Action]:
     if actions:
         return actions
 
-    # Collect attack actions, deduplicating identical creatures
-    # Only generate one "Attack with X" action per creature type to avoid
-    # exploring equivalent permutations (e.g., "Sap1 attacks then Sap2" vs "Sap2 then Sap1")
-    seen_attackers = set()
+    # Collect eligible attackers, deduplicating identical creatures
+    eligible_attackers = []  # List of (index, card, signature)
+    seen_sigs = set()
+
     for i, card in enumerate(state.battlefield[player]):
         # Use is_creature() method for unified creature check
         if not card.is_creature():
@@ -81,35 +93,45 @@ def _get_attack_actions(state: 'GameState', player: int) -> List[Action]:
         if getattr(card, 'entered_this_turn', False):
             continue
 
-        # Create a signature for this creature type (include eot boosts for pumped creatures)
-        creature_sig = (card.name, getattr(card, 'power', 0), getattr(card, 'toughness', 0),
-                        getattr(card, 'plus_counters', 0), getattr(card, 'level', 0),
-                        getattr(card, 'eot_power_boost', 0), getattr(card, 'eot_toughness_boost', 0))
-        if creature_sig in seen_attackers:
+        # Create a signature for this creature type
+        sig = (card.name, getattr(card, 'power', 0), getattr(card, 'toughness', 0),
+               getattr(card, 'plus_counters', 0), getattr(card, 'level', 0),
+               getattr(card, 'eot_power_boost', 0), getattr(card, 'eot_toughness_boost', 0))
+        if sig in seen_sigs:
             continue  # Skip duplicate creature types
-        seen_attackers.add(creature_sig)
+        seen_sigs.add(sig)
+        eligible_attackers.append((i, card, sig))
 
-        # Generate attack action that picks this specific creature
-        def make_attack(card_idx):
-            def attack(s: 'GameState') -> 'GameState':
-                ns = s.copy()
-                attacker = ns.battlefield[player][card_idx]
+    # Generate attack combo action factory
+    def make_attack_combo(attacker_indices: list):
+        def attack(s: 'GameState') -> 'GameState':
+            ns = s.copy()
+            for idx in attacker_indices:
+                attacker = ns.battlefield[player][idx]
                 attacker.attacking = True
-                attacker.tapped = True
-                return ns
-            return attack
-        actions.append(Action(f"Attack with {card.name}", make_attack(i)))
+                # Vigilance: creature doesn't tap when attacking
+                if not (hasattr(attacker, 'keywords') and 'vigilance' in attacker.keywords):
+                    attacker.tapped = True
+            # Immediately transition to next phase
+            if attacker_indices:
+                ns.phase = "combat_block"
+            else:
+                ns.phase = "end_turn"
+            return ns
+        return attack
 
-    # Always can choose not to attack
-    def no_attack(s: 'GameState') -> 'GameState':
-        ns = s.copy()
-        # Check if any attackers
-        if ns.get_attackers():
-            ns.phase = "combat_block"
-        else:
-            ns.phase = "end_turn"
-        return ns
-    actions.append(Action("No Attack", no_attack))
+    # Generate actions for all subsets - larger sets first for better alpha-beta pruning
+    for r in range(len(eligible_attackers), -1, -1):
+        for combo in itertools_combinations(eligible_attackers, r):
+            indices = [idx for idx, card, sig in combo]
+            names = [card.name for idx, card, sig in combo]
+
+            if names:
+                description = "Attack with " + ", ".join(names)
+            else:
+                description = "No Attack"
+
+            actions.append(Action(description, make_attack_combo(indices)))
 
     return actions
 
@@ -180,5 +202,44 @@ def _get_block_actions(state: 'GameState', player: int) -> List[Action]:
         ns.phase = "combat_damage"
         return ns
     actions.append(Action("No Block", no_block))
+
+    return actions
+
+
+def _get_response_actions(state: 'GameState') -> List[Action]:
+    """Get actions available during response phase.
+
+    The non-active player can respond to spells on the stack with instants,
+    or pass to let the stack resolve.
+    """
+    actions = []
+    # The responding player is the opponent of the spell caster (active player)
+    responder = 1 - state.active_player
+
+    # Collect instant response actions from responder's hand
+    for card in state.hands[responder]:
+        actions.extend(card.get_response_actions(state))
+
+    # Always can pass (resolves the stack)
+    def pass_priority(s: 'GameState') -> 'GameState':
+        ns = s.copy()
+
+        # Resolve top spell on stack
+        if ns.stack:
+            spell = ns.stack.pop()
+            # Call the spell's resolve method
+            ns = spell.resolve(ns)
+            # Move spell to graveyard (if not already there)
+            if spell not in ns.graveyard[spell.owner]:
+                ns.graveyard[spell.owner].append(spell)
+
+        # If stack is empty, return to main phase
+        if not ns.stack:
+            ns.phase = "main1"
+        # Otherwise stay in response phase for next spell
+
+        return ns
+
+    actions.append(Action("Pass (resolve spell)", pass_priority))
 
     return actions

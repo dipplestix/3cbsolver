@@ -24,8 +24,7 @@ class Thallid(Creature):
             owner=owner,
             power=1,
             toughness=1,
-            mana_cost=1,
-            mana_color='G',
+            color_costs={'G': 1},
             keywords=[],
             creature_types=['Fungus']
         )

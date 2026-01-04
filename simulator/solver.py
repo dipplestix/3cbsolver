@@ -50,29 +50,30 @@ def minimax(state: GameState, player: int, memo: Dict = None, depth: int = 0,
         return dominated
 
     original_alpha = alpha
+    original_beta = beta
 
-    # Handle automatic phases
+    # Handle automatic phases - use wide bounds to get exact values for caching
     if state.phase == "combat_damage":
         new_state = resolve_combat_damage(state)
-        result = minimax(new_state, player, memo, depth + 1, alpha, beta, dominance)
+        result = minimax(new_state, player, memo, depth + 1, -2, 2, dominance)
         memo[key] = (result, 'exact')
         return result
 
     if state.phase == "end_turn":
         new_state = end_turn(state)
-        result = minimax(new_state, player, memo, depth + 1, alpha, beta, dominance)
+        result = minimax(new_state, player, memo, depth + 1, -2, 2, dominance)
         memo[key] = (result, 'exact')
         return result
 
     if state.phase == "untap":
         new_state = untap(state)
-        result = minimax(new_state, player, memo, depth + 1, alpha, beta, dominance)
+        result = minimax(new_state, player, memo, depth + 1, -2, 2, dominance)
         memo[key] = (result, 'exact')
         return result
 
     if state.phase == "upkeep":
         new_state = upkeep(state)
-        result = minimax(new_state, player, memo, depth + 1, alpha, beta, dominance)
+        result = minimax(new_state, player, memo, depth + 1, -2, 2, dominance)
         memo[key] = (result, 'exact')
         return result
 
@@ -80,19 +81,19 @@ def minimax(state: GameState, player: int, memo: Dict = None, depth: int = 0,
     actions = get_available_actions(state)
 
     if not actions:
-        # No actions available, pass to next phase
+        # No actions available, pass to next phase - use wide bounds for exact values
         if state.phase == "main1":
             new_state = state.copy()
             new_state.phase = "combat_attack"
-            result = minimax(new_state, player, memo, depth + 1, alpha, beta, dominance)
+            result = minimax(new_state, player, memo, depth + 1, -2, 2, dominance)
         elif state.phase == "combat_attack":
             new_state = state.copy()
             new_state.phase = "end_turn"
-            result = minimax(new_state, player, memo, depth + 1, alpha, beta, dominance)
+            result = minimax(new_state, player, memo, depth + 1, -2, 2, dominance)
         elif state.phase == "combat_block":
             new_state = state.copy()
             new_state.phase = "combat_damage"
-            result = minimax(new_state, player, memo, depth + 1, alpha, beta, dominance)
+            result = minimax(new_state, player, memo, depth + 1, -2, 2, dominance)
         else:
             result = 0
         memo[key] = (result, 'exact')
@@ -124,9 +125,9 @@ def minimax(state: GameState, player: int, memo: Dict = None, depth: int = 0,
             if alpha >= beta:
                 break
 
-    # Store results
-    flag = store_transposition(memo, key, best_score, original_alpha, beta)
-    if flag == 'exact':
+    # Store results - only store exact values to avoid bound-related bugs
+    if best_score > original_alpha and best_score < original_beta:
+        memo[key] = (best_score, 'exact')
         store_dominance(dominance, board_key, state.life, player, best_score)
 
     return best_score

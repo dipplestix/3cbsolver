@@ -46,3 +46,7 @@ class Artifact(Card):
 
 def create_mox_jet(owner: int) -> Artifact:
     return Artifact("Mox Jet", owner, mana_cost=0, mana_produced='B')
+
+
+def create_mox_pearl(owner: int) -> Artifact:
+    return Artifact("Mox Pearl", owner, mana_cost=0, mana_produced='W')

@@ -8,6 +8,9 @@ Plains - Basic Land — Plains
 Island - Basic Land — Island
 (T: Add U.)
 
+Swamp - Basic Land — Swamp
+(T: Add B.)
+
 Forest - Basic Land — Forest
 (T: Add G.)
 """
@@ -70,6 +73,10 @@ class Land(Card):
         new_land.tapped = self.tapped
         new_land.entered_this_turn = self.entered_this_turn
         return new_land
+
+    def is_land(self) -> bool:
+        """Return True - this is a land."""
+        return True
 
 
 class CreatureLand(Land):
@@ -291,3 +298,7 @@ def create_forest(owner: int) -> Land:
 
 def create_plains(owner: int) -> Land:
     return Land("Plains", owner, 'W')
+
+
+def create_swamp(owner: int) -> Land:
+    return Land("Swamp", owner, 'B')

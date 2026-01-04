@@ -27,8 +27,7 @@ class OldGrowthDryads(Creature):
             owner=owner,
             power=3,
             toughness=3,
-            mana_cost=1,
-            mana_color='G',
+            color_costs={'G': 1},
             keywords=[]
         )
 
@@ -43,17 +42,14 @@ class OldGrowthDryads(Creature):
             return []
 
         def cast(s: 'GameState') -> 'GameState':
-            ns = s.copy()
+            # Pay 1 green mana
+            ns = s.pay_mana(self.owner, 'G', 1)
+            # Move dryads from hand to battlefield
             for i, card in enumerate(ns.hands[self.owner]):
                 if card.name == self.name:
                     dryads = ns.hands[self.owner].pop(i)
                     dryads.entered_this_turn = True
                     ns.battlefield[self.owner].append(dryads)
-                    break
-            # Tap a green source to pay for it
-            for card in ns.battlefield[self.owner]:
-                if hasattr(card, 'mana_produced') and card.mana_produced == 'G' and not card.tapped:
-                    card.tapped = True
                     break
             # ETB: Opponent may search for basic land - no effect in 3CB (no library)
             return ns

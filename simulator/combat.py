@@ -79,6 +79,18 @@ def resolve_combat_damage(state: 'GameState') -> 'GameState':
                     if hasattr(attacker, 'on_deal_combat_damage_to_player'):
                         ns = attacker.on_deal_combat_damage_to_player(ns)
 
+        # Check for game over after first strike damage to players
+        if ns.life[0] <= 0:
+            ns.game_over = True
+            ns.winner = 1
+            ns.phase = "end_turn"
+            return ns
+        if ns.life[1] <= 0:
+            ns.game_over = True
+            ns.winner = 0
+            ns.phase = "end_turn"
+            return ns
+
     # Regular damage step
     for att_idx, attacker in attackers_with_idx:
         if att_idx in dead_attackers:
@@ -115,6 +127,19 @@ def resolve_combat_damage(state: 'GameState') -> 'GameState':
                 ns.life[defender] -= damage
                 if hasattr(attacker, 'on_deal_combat_damage_to_player'):
                     ns = attacker.on_deal_combat_damage_to_player(ns)
+
+    # Check for game over from combat damage to players BEFORE death triggers
+    # If a player is at 0 or less life from combat damage, they lose immediately
+    if ns.life[0] <= 0:
+        ns.game_over = True
+        ns.winner = 1
+        ns.phase = "end_turn"
+        return ns
+    elif ns.life[1] <= 0:
+        ns.game_over = True
+        ns.winner = 0
+        ns.phase = "end_turn"
+        return ns
 
     # Remove dead creatures and trigger death abilities
     # Process in reverse index order to avoid index shifting issues

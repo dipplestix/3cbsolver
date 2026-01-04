@@ -23,8 +23,7 @@ class SazhsChocobo(Creature):
             owner=owner,
             power=0,
             toughness=1,
-            mana_cost=1,
-            mana_color='any',
+            generic_cost=1,  # {1} - can be paid with any color
             keywords=[]
         )
         self.plus_counters = 0
@@ -66,18 +65,14 @@ class SazhsChocobo(Creature):
             return []
 
         def cast(s: 'GameState') -> 'GameState':
-            ns = s.copy()
+            # Pay 1 generic mana
+            ns = s.pay_generic_mana(self.owner, 1)
+            # Move chocobo from hand to battlefield
             for i, card in enumerate(ns.hands[self.owner]):
                 if card.name == self.name:
                     chocobo = ns.hands[self.owner].pop(i)
                     chocobo.entered_this_turn = True
                     ns.battlefield[self.owner].append(chocobo)
-                    break
-            for card in ns.battlefield[self.owner]:
-                if hasattr(card, 'mana_produced') and card.mana_produced and not card.tapped:
-                    card.tapped = True
-                    if isinstance(card, UndiscoveredParadise):
-                        card.return_to_hand = True
                     break
             return ns
 

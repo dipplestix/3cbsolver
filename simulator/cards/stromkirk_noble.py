@@ -25,8 +25,7 @@ class StromkirkNoble(Creature):
             owner=owner,
             power=1,
             toughness=1,
-            mana_cost=1,
-            mana_color='R',
+            color_costs={'R': 1},
             keywords=[],
             creature_types=['Vampire', 'Noble']
         )

@@ -5,7 +5,7 @@ import signal
 from simulator import (
     solve, GameState, get_available_actions, minimax,
     resolve_combat_damage, end_turn, untap, upkeep,
-    create_island, create_forest, create_plains, create_mountain,
+    create_island, create_forest, create_plains, create_swamp, create_mountain,
     create_hammerheim,
     create_mox_jet, create_mutavault,
     create_sleep_cursed_faerie, create_scythe_tiger,
@@ -16,6 +16,8 @@ from simulator import (
     create_bottomless_vault, create_tomb_of_urami,
     create_remote_farm, create_luminarch_aspirant,
     create_thallid, create_pendelhaven,
+    create_shrieking_affliction,
+    create_crystal_vein, create_mox_pearl, create_soldier_military_program,
 )
 
 # Deck definitions - only enabled decks for now
@@ -23,11 +25,15 @@ DECKS = {
     "student": ("Plains + Student of Warfare", lambda p: [create_plains(p), create_student_of_warfare(p)]),
     "scf": ("Island + Sleep-Cursed Faerie", lambda p: [create_island(p), create_sleep_cursed_faerie(p)]),
     "tiger": ("Forest + Scythe Tiger", lambda p: [create_forest(p), create_scythe_tiger(p)]),
+    "mutavault": ("Mox Jet + Mutavault", lambda p: [create_mox_jet(p), create_mutavault(p)]),
+    "sniper": ("Dryad Arbor + Dragon Sniper", lambda p: [create_dryad_arbor(p), create_dragon_sniper(p)]),
+    "noble": ("Mountain + Stromkirk Noble", lambda p: [create_mountain(p), create_stromkirk_noble(p)]),
+    "hero": ("Hammerheim + Heartfire Hero", lambda p: [create_hammerheim(p), create_heartfire_hero(p)]),
+    # Temporarily disabled - will revisit later:
+    # "aspirant": ("Swamp + Mox Pearl + Luminarch Aspirant", lambda p: [create_swamp(p), create_mox_pearl(p), create_luminarch_aspirant(p)]),
+    # "affliction": ("Swamp + Shrieking Affliction", lambda p: [create_swamp(p), create_shrieking_affliction(p)]),
+    # "soldier": ("Crystal Vein + Mox Pearl + SOLDIER Military Program", lambda p: [create_crystal_vein(p), create_mox_pearl(p), create_soldier_military_program(p)]),
     # Temporarily disabled for refactoring:
-    # "mutavault": ("Mox Jet + Mutavault", lambda p: [create_mox_jet(p), create_mutavault(p)]),
-    # "sniper": ("Dryad Arbor + Dragon Sniper", lambda p: [create_dryad_arbor(p), create_dragon_sniper(p)]),
-    # "noble": ("Mountain + Stromkirk Noble", lambda p: [create_mountain(p), create_stromkirk_noble(p)]),
-    # "hero": ("Hammerheim + Heartfire Hero", lambda p: [create_hammerheim(p), create_heartfire_hero(p)]),
     # "urami": ("Bottomless Vault + Tomb of Urami", lambda p: [create_bottomless_vault(p), create_tomb_of_urami(p)]),
     # "aspirant": ("Remote Farm + Luminarch Aspirant", lambda p: [create_remote_farm(p), create_luminarch_aspirant(p)]),
     # "thallid": ("Pendelhaven + Thallid", lambda p: [create_pendelhaven(p), create_thallid(p)]),
@@ -70,6 +76,100 @@ def solve_with_timeout(deck1, deck2, first_player, timeout_sec=30):
     except TimeoutError:
         signal.alarm(0)
         return None, None
+
+
+def get_goldfish_turn(deck_name, timeout_sec=30):
+    """Get the turn a deck wins against goldfish. Returns P1's turn number or None."""
+    # Check cache first
+    cache_key = f"{deck_name}_goldfish"
+    if cache_key in MATCHUP_CACHE:
+        return MATCHUP_CACHE[cache_key]
+
+    deck_factory = DECKS[deck_name][1]
+    p1_hand = deck_factory(0)
+
+    state = GameState(
+        life=[20, 20],
+        hands=[[c.copy() for c in p1_hand], []],
+        battlefield=[[], []],
+        artifacts=[[], []],
+        graveyard=[[], []],
+        active_player=0,
+        phase="main1",
+        turn=1
+    )
+
+    signal.signal(signal.SIGALRM, timeout_handler)
+    signal.alarm(timeout_sec)
+
+    try:
+        memo = {}
+        depth = 0
+        max_depth = 200
+        p1_turn = 1  # Track P1's turn count separately
+
+        while not state.game_over and depth < max_depth:
+            if state.phase == "combat_damage":
+                state = resolve_combat_damage(state)
+                continue
+            if state.phase == "end_turn":
+                # Track when P1's turn ends to increment counter
+                if state.active_player == 0:
+                    p1_turn += 1
+                state = end_turn(state)
+                continue
+            if state.phase == "untap":
+                state = untap(state)
+                continue
+            if state.phase == "upkeep":
+                state = upkeep(state)
+                continue
+
+            actions = get_available_actions(state)
+            if not actions:
+                break
+
+            # P2 (goldfish) just passes
+            if state.active_player == 1:
+                for action in actions:
+                    if "Pass" in action.description or "No" in action.description:
+                        state = action.execute(state)
+                        break
+                depth += 1
+                continue
+
+            # P1 picks best action
+            if state.phase == "combat_block":
+                decision_maker = 1 - state.active_player
+            else:
+                decision_maker = state.active_player
+
+            best_action = None
+            best_score = None
+            for action in actions:
+                new_state = action.execute(state)
+                score = minimax(new_state, decision_maker, memo, 0)
+                if best_score is None or score > best_score:
+                    best_score = score
+                    best_action = action
+
+            if best_action:
+                state = best_action.execute(state)
+            depth += 1
+
+        signal.alarm(0)
+
+        if state.game_over and state.winner == 0:
+            # Use p1_turn (not incremented yet if we won mid-turn)
+            win_turn = p1_turn
+            MATCHUP_CACHE[cache_key] = win_turn
+            save_cache(MATCHUP_CACHE)
+            return win_turn
+        return None
+
+    except TimeoutError:
+        signal.alarm(0)
+        return None
 
 
 def cmd_solve(args):
@@ -145,6 +245,23 @@ def cmd_metagame(args):
     # results[i][j] = (play_result, draw_result) for row i vs col j
     # where result is 'W', 'L', or 'T' from row's perspective
     results = [[None] * n for _ in range(n)]
+
+    # Print goldfish table first
+    print("=" * 60)
+    print("GOLDFISH KILLS")
+    print("Turn each deck wins against goldfish (no opponent)")
+    print("=" * 60)
+    print()
+    print(f"{'Deck':<12} {'Turn':<6} {'Deck Name'}")
+    print("-" * 50)
+    goldfish_results = []
+    for deck_key in deck_names:
+        turn = get_goldfish_turn(deck_key, timeout_sec=args.timeout)
+        deck_display = DECKS[deck_key][0]
+        turn_str = str(turn) if turn else "?"
+        goldfish_results.append((deck_key, turn, deck_display))
+        print(f"{deck_key:<12} {turn_str:<6} {deck_display}")
+    print()
 
     print("=" * 60)
     print("METAGAME TABLE")

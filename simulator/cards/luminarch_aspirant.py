@@ -24,8 +24,8 @@ class LuminarchAspirant(Creature):
             owner=owner,
             power=1,
             toughness=1,
-            mana_cost=2,
-            mana_color='W',
+            color_costs={'W': 1},
+            generic_cost=1,
             keywords=[],
             creature_types=['Human', 'Cleric']
         )
@@ -59,14 +59,21 @@ class LuminarchAspirant(Creature):
         if state.phase != "main1":
             return []
 
-        # Need 2 white mana (1W cost)
+        # Need 1W (1 generic + 1 white)
+        # Check total mana available
+        if state.get_available_mana(self.owner) < 2:
+            return []
+
+        # Check white mana available
         available = state.get_available_mana_by_color(self.owner)
-        if available.get('W', 0) < 2:
+        if available.get('W', 0) < 1:
             return []
 
         def cast(s: 'GameState') -> 'GameState':
-            # Pay mana first
-            ns = s.pay_mana(self.owner, 'W', 2)
+            # Pay 1 white mana
+            ns = s.pay_mana(self.owner, 'W', 1)
+            # Pay 1 generic mana
+            ns = ns.pay_generic_mana(self.owner, 1)
 
             # Remove from hand and put on battlefield
             for i, card in enumerate(ns.hands[self.owner]):

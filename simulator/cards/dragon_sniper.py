@@ -22,8 +22,7 @@ class DragonSniper(Creature):
             owner=owner,
             power=1,
             toughness=1,
-            mana_cost=1,
-            mana_color='G',
+            color_costs={'G': 1},
             keywords=['vigilance', 'reach', 'deathtouch']
         )
 
@@ -50,21 +49,14 @@ class DragonSniper(Creature):
             return []
 
         def cast(s: 'GameState') -> 'GameState':
-            ns = s.copy()
+            # Pay 1 green mana
+            ns = s.pay_mana(self.owner, 'G', 1)
+            # Move sniper from hand to battlefield
             for i, card in enumerate(ns.hands[self.owner]):
                 if card.name == self.name:
                     sniper = ns.hands[self.owner].pop(i)
                     sniper.entered_this_turn = True
                     ns.battlefield[self.owner].append(sniper)
-                    break
-            # Tap a green source to pay for it
-            for card in ns.battlefield[self.owner]:
-                if hasattr(card, 'mana_produced') and card.mana_produced == 'G' and not card.tapped:
-                    # Check for summoning sickness on creature lands
-                    if hasattr(card, 'entered_this_turn') and card.entered_this_turn:
-                        if hasattr(card, 'power'):  # It's a creature
-                            continue
-                    card.tapped = True
                     break
             return ns
 
