@@ -2,6 +2,10 @@
 """3CB Simulator CLI - Unified interface for running simulations."""
 import argparse
 import signal
+import sys
+
+# Increase recursion limit for deep game trees (e.g., urami deck)
+sys.setrecursionlimit(10000)
 from simulator import (
     solve, GameState, get_available_actions, minimax,
     resolve_combat_damage, end_turn, untap, upkeep,
@@ -18,6 +22,7 @@ from simulator import (
     create_thallid, create_pendelhaven,
     create_shrieking_affliction,
     create_crystal_vein, create_mox_pearl, create_soldier_military_program,
+    create_durkwood_baloth, create_keldon_halberdier,
 )
 
 # Deck definitions - only enabled decks for now
@@ -29,13 +34,13 @@ DECKS = {
     "sniper": ("Dryad Arbor + Dragon Sniper", lambda p: [create_dryad_arbor(p), create_dragon_sniper(p)]),
     "noble": ("Mountain + Stromkirk Noble", lambda p: [create_mountain(p), create_stromkirk_noble(p)]),
     "hero": ("Hammerheim + Heartfire Hero", lambda p: [create_hammerheim(p), create_heartfire_hero(p)]),
+    "urami": ("Bottomless Vault + Tomb of Urami", lambda p: [create_bottomless_vault(p), create_tomb_of_urami(p)]),
+    "aspirant": ("Remote Farm + Luminarch Aspirant", lambda p: [create_remote_farm(p), create_luminarch_aspirant(p)]),
+    "baloth": ("Forest + Durkwood Baloth", lambda p: [create_forest(p), create_durkwood_baloth(p)]),
+    "halberdier": ("Mountain + Keldon Halberdier", lambda p: [create_mountain(p), create_keldon_halberdier(p)]),
     # Temporarily disabled - will revisit later:
-    # "aspirant": ("Swamp + Mox Pearl + Luminarch Aspirant", lambda p: [create_swamp(p), create_mox_pearl(p), create_luminarch_aspirant(p)]),
     # "affliction": ("Swamp + Shrieking Affliction", lambda p: [create_swamp(p), create_shrieking_affliction(p)]),
     # "soldier": ("Crystal Vein + Mox Pearl + SOLDIER Military Program", lambda p: [create_crystal_vein(p), create_mox_pearl(p), create_soldier_military_program(p)]),
-    # Temporarily disabled for refactoring:
-    # "urami": ("Bottomless Vault + Tomb of Urami", lambda p: [create_bottomless_vault(p), create_tomb_of_urami(p)]),
-    # "aspirant": ("Remote Farm + Luminarch Aspirant", lambda p: [create_remote_farm(p), create_luminarch_aspirant(p)]),
     # "thallid": ("Pendelhaven + Thallid", lambda p: [create_pendelhaven(p), create_thallid(p)]),
     # "dryads": ("Forest + Old-Growth Dryads", lambda p: [create_forest(p), create_old_growth_dryads(p)]),
     # "chocobo": ("Undiscovered Paradise + Sazh's Chocobo", lambda p: [create_undiscovered_paradise(p), create_sazhs_chocobo(p)]),
@@ -65,12 +70,13 @@ def timeout_handler(signum, frame):
     raise TimeoutError()
 
 
-def solve_with_timeout(deck1, deck2, first_player, timeout_sec=30):
+def solve_with_timeout(deck1, deck2, first_player, timeout_sec=30, p1_life=20, p2_life=20):
     """Run solver with timeout."""
     signal.signal(signal.SIGALRM, timeout_handler)
     signal.alarm(timeout_sec)
     try:
-        result, desc = solve(deck1, deck2, first_player=first_player)
+        result, desc = solve(deck1, deck2, first_player=first_player,
+                            p1_life=p1_life, p2_life=p2_life)
         signal.alarm(0)
         return result, desc
     except TimeoutError:
@@ -177,8 +183,13 @@ def cmd_solve(args):
     d1_name, d1_factory = DECKS[args.deck1][0], DECKS[args.deck1][1]
     d2_name, d2_factory = DECKS[args.deck2][0], DECKS[args.deck2][1]
 
+    p1_life = getattr(args, 'p1_life', 20)
+    p2_life = getattr(args, 'p2_life', 20)
+
     print(f"\n{d1_name} vs {d2_name}")
     print(f"First player: {'P1' if args.first == 0 else 'P2'}")
+    if p1_life != 20 or p2_life != 20:
+        print(f"Starting life: P1={p1_life}, P2={p2_life}")
     print("-" * 40)
 
     p1_hand = d1_factory(0)
@@ -188,7 +199,9 @@ def cmd_solve(args):
         [c.copy() for c in p1_hand],
         [c.copy() for c in p2_hand],
         first_player=args.first,
-        timeout_sec=args.timeout
+        timeout_sec=args.timeout,
+        p1_life=p1_life,
+        p2_life=p2_life
     )
 
     if desc is None:
@@ -594,16 +607,21 @@ def cmd_show(args):
     d1_name, d1_factory = DECKS[args.deck1][0], DECKS[args.deck1][1]
     d2_name, d2_factory = DECKS[args.deck2][0], DECKS[args.deck2][1]
 
+    p1_life = getattr(args, 'p1_life', 20)
+    p2_life = getattr(args, 'p2_life', 20)
+
     print("=" * 85)
     print(f"{d1_name} vs {d2_name}")
     print(f"First player: {'P1' if args.first == 0 else 'P2'}")
+    if p1_life != 20 or p2_life != 20:
+        print(f"Starting life: P1={p1_life}, P2={p2_life}")
     print("=" * 85)
 
     p1_hand = d1_factory(0)
     p2_hand = d2_factory(1)
 
     state = GameState(
-        life=[20, 20],
+        life=[p1_life, p2_life],
         hands=[[c.copy() for c in p1_hand], [c.copy() for c in p2_hand]],
         battlefield=[[], []],
         artifacts=[[], []],
@@ -616,7 +634,9 @@ def cmd_show(args):
     result, desc = solve(
         [c.copy() for c in p1_hand],
         [c.copy() for c in p2_hand],
-        first_player=args.first
+        first_player=args.first,
+        p1_life=p1_life,
+        p2_life=p2_life
     )
     print(f"Result: {desc}")
     print()
@@ -677,6 +697,9 @@ def cmd_show(args):
 
         if state.phase == "combat_block":
             decision_maker = 1 - state.active_player
+        elif state.phase == "response" and state.stack:
+            # In response phase, the responder is opponent of top spell's owner
+            decision_maker = 1 - state.stack[-1].owner
         else:
             decision_maker = state.active_player
 
@@ -695,6 +718,9 @@ def cmd_show(args):
             if state.phase == "combat_block":
                 player = "P1" if (1 - state.active_player) == 0 else "P2"
                 action_player = 1 - state.active_player
+            elif state.phase == "response" and state.stack:
+                player = "P1" if (1 - state.stack[-1].owner) == 0 else "P2"
+                action_player = 1 - state.stack[-1].owner
             powers_before = get_creature_powers(state)
             cards_before = get_card_states(state)
             state = best_action.execute(state)
@@ -784,6 +810,8 @@ def cmd_goldfish(args):
 
             if state.phase == "combat_block":
                 decision_maker = 1 - state.active_player
+            elif state.phase == "response" and state.stack:
+                decision_maker = 1 - state.stack[-1].owner
             else:
                 decision_maker = state.active_player
 
@@ -802,6 +830,9 @@ def cmd_goldfish(args):
                 if state.phase == "combat_block":
                     player = "P1" if (1 - state.active_player) == 0 else "P2"
                     action_player = 1 - state.active_player
+                elif state.phase == "response" and state.stack:
+                    player = "P1" if (1 - state.stack[-1].owner) == 0 else "P2"
+                    action_player = 1 - state.stack[-1].owner
                 cards_before = get_card_states(state)
                 powers_before = get_creature_powers(state)
                 state = best_action.execute(state)
@@ -879,6 +910,8 @@ def cmd_goldfish(args):
 
             if state.phase == "combat_block":
                 decision_maker = 1 - state.active_player
+            elif state.phase == "response" and state.stack:
+                decision_maker = 1 - state.stack[-1].owner
             else:
                 decision_maker = state.active_player
 
@@ -944,6 +977,8 @@ Examples:
     p.add_argument("--first", type=int, default=0, choices=[0, 1],
                    help="Who goes first (0=P1, 1=P2)")
     p.add_argument("--timeout", type=int, default=30, help="Solver timeout in seconds")
+    p.add_argument("--p1-life", type=int, default=20, help="P1 starting life total")
+    p.add_argument("--p2-life", type=int, default=20, help="P2 starting life total")
 
     # metagame command
     p = subparsers.add_parser("metagame", help="Run metagame table")
@@ -956,6 +991,8 @@ Examples:
     p.add_argument("--first", type=int, default=0, choices=[0, 1],
                    help="Who goes first (0=P1, 1=P2)")
     p.add_argument("--max-depth", type=int, default=200, help="Max turns to show")
+    p.add_argument("--p1-life", type=int, default=20, help="P1 starting life total")
+    p.add_argument("--p2-life", type=int, default=20, help="P2 starting life total")
 
     # list command
     subparsers.add_parser("list", help="List available decks")

@@ -33,6 +33,16 @@ from .sorcery import Sorcery
 from .instant import Instant
 from .inquisition_of_kozilek import InquisitionOfKozilek
 from .mental_misstep import MentalMisstep
+from .daze import Daze, create_daze
+from .suspend_creature import SuspendCreature
+from .dual_land import (
+    DualLand,
+    create_underground_sea, create_volcanic_island, create_tundra,
+    create_tropical_island, create_savannah, create_scrubland,
+    create_badlands, create_taiga, create_plateau, create_bayou,
+)
+from .durkwood_baloth import DurkwoodBaloth, create_durkwood_baloth
+from .keldon_halberdier import KeldonHalberdier, create_keldon_halberdier
 
 
 def create_inquisition_of_kozilek(owner: int) -> InquisitionOfKozilek:
@@ -47,11 +57,16 @@ def create_mental_misstep(owner: int) -> MentalMisstep:
 __all__ = [
     # Base classes
     'Card', 'Action', 'CardType',
-    'Land', 'CreatureLand', 'Creature', 'Artifact', 'Enchantment',
-    'Sorcery', 'Instant',
-    # Factory functions
+    'Land', 'CreatureLand', 'DualLand', 'Creature', 'Artifact', 'Enchantment',
+    'Sorcery', 'Instant', 'SuspendCreature',
+    # Factory functions - Basic lands
     'create_island', 'create_forest', 'create_plains', 'create_swamp', 'create_mountain',
     'create_hammerheim',
+    # Factory functions - Dual lands
+    'create_underground_sea', 'create_volcanic_island', 'create_tundra',
+    'create_tropical_island', 'create_savannah', 'create_scrubland',
+    'create_badlands', 'create_taiga', 'create_plateau', 'create_bayou',
+    # Factory functions - Other
     'create_mox_jet', 'create_mox_pearl', 'create_mutavault',
     'create_crystal_vein', 'create_soldier_token', 'create_soldier_military_program',
     'create_sleep_cursed_faerie', 'create_scythe_tiger',
@@ -63,7 +78,8 @@ __all__ = [
     'create_remote_farm', 'create_luminarch_aspirant',
     'create_thallid', 'create_saproling_token', 'create_pendelhaven',
     'create_shrieking_affliction',
-    'create_inquisition_of_kozilek', 'create_mental_misstep',
+    'create_inquisition_of_kozilek', 'create_mental_misstep', 'create_daze',
+    'create_durkwood_baloth', 'create_keldon_halberdier',
     # Card classes (for type checking)
     'Mountain', 'Hammerheim', 'SleepCursedFaerie', 'ScytheTiger',
     'UndiscoveredParadise', 'SazhsChocobo', 'StudentOfWarfare',
@@ -71,5 +87,6 @@ __all__ = [
     'HeartfireHero', 'BottomlessVault', 'TombOfUrami', 'UramiToken',
     'RemoteFarm', 'LuminarchAspirant', 'Thallid', 'SaprolingToken', 'Pendelhaven',
     'ShriekingAffliction', 'CrystalVein', 'SoldierToken', 'SoldierMilitaryProgram',
-    'InquisitionOfKozilek', 'MentalMisstep',
+    'InquisitionOfKozilek', 'MentalMisstep', 'Daze',
+    'DurkwoodBaloth', 'KeldonHalberdier',
 ]

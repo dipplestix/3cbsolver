@@ -102,15 +102,16 @@ class Creature(Card):
         # Capture costs for closure
         color_costs = self.color_costs.copy()
         generic_cost = self.generic_cost
+        creature_name = self.name
 
         def cast(s: 'GameState') -> 'GameState':
             ns = s.copy()
-            # Move card from hand to battlefield
+            # Move card from hand to stack (not battlefield yet)
             for i, card in enumerate(ns.hands[self.owner]):
-                if card.name == self.name:
+                if card.name == creature_name:
                     card_copy = ns.hands[self.owner].pop(i)
-                    card_copy.entered_this_turn = True
-                    ns.battlefield[self.owner].append(card_copy)
+                    card_copy.entered_this_turn = True  # Will have summoning sickness when it resolves
+                    ns.stack.append(card_copy)
                     break
             # Pay each colored cost
             for color, amount in color_costs.items():
@@ -118,9 +119,19 @@ class Creature(Card):
             # Pay generic cost
             if generic_cost > 0:
                 ns = ns.pay_generic_mana(self.owner, generic_cost)
+            # Enter response phase to give opponent chance to respond
+            ns.phase = "response"
             return ns
 
         return [Action(f"Cast {self.name}", cast)]
+
+    def resolve(self, state: 'GameState') -> 'GameState':
+        """Resolve this creature spell from the stack to the battlefield."""
+        ns = state.copy()
+        # Move from stack to battlefield (the spell object is already removed from stack by caller)
+        # Find ourselves in the original state's stack to get owner info
+        ns.battlefield[self.owner].append(self)
+        return ns
 
     def get_attack_actions(self, state: 'GameState') -> List[Action]:
         if state.active_player != self.owner:

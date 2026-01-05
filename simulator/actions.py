@@ -209,12 +209,17 @@ def _get_block_actions(state: 'GameState', player: int) -> List[Action]:
 def _get_response_actions(state: 'GameState') -> List[Action]:
     """Get actions available during response phase.
 
-    The non-active player can respond to spells on the stack with instants,
+    The opponent of whoever owns the top spell can respond with instants,
     or pass to let the stack resolve.
     """
     actions = []
-    # The responding player is the opponent of the spell caster (active player)
-    responder = 1 - state.active_player
+
+    if not state.stack:
+        return actions
+
+    # The responding player is the opponent of whoever owns the top spell
+    top_spell_owner = state.stack[-1].owner
+    responder = 1 - top_spell_owner
 
     # Collect instant response actions from responder's hand
     for card in state.hands[responder]:
@@ -229,9 +234,11 @@ def _get_response_actions(state: 'GameState') -> List[Action]:
             spell = ns.stack.pop()
             # Call the spell's resolve method
             ns = spell.resolve(ns)
-            # Move spell to graveyard (if not already there)
-            if spell not in ns.graveyard[spell.owner]:
-                ns.graveyard[spell.owner].append(spell)
+            # Creatures go to battlefield (handled by resolve), not graveyard
+            # Non-creature spells (instants, sorceries) go to graveyard
+            if not spell.is_creature():
+                if spell not in ns.graveyard[spell.owner]:
+                    ns.graveyard[spell.owner].append(spell)
 
         # If stack is empty, return to main phase
         if not ns.stack:

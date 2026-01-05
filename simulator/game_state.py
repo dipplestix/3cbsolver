@@ -17,6 +17,7 @@ class GameState:
     artifacts: List[List['Card']] = field(default_factory=lambda: [[], []])
     enchantments: List[List['Card']] = field(default_factory=lambda: [[], []])
     graveyard: List[List['Card']] = field(default_factory=lambda: [[], []])
+    exile: List[List['Card']] = field(default_factory=lambda: [[], []])
     stack: List['Card'] = field(default_factory=list)
 
     active_player: int = 0
@@ -45,6 +46,7 @@ class GameState:
             artifacts=[[c.copy() for c in self.artifacts[0]], [c.copy() for c in self.artifacts[1]]],
             enchantments=[[c.copy() for c in self.enchantments[0]], [c.copy() for c in self.enchantments[1]]],
             graveyard=[[c.copy() for c in self.graveyard[0]], [c.copy() for c in self.graveyard[1]]],
+            exile=[[c.copy() for c in self.exile[0]], [c.copy() for c in self.exile[1]]],
             stack=[c.copy() for c in self.stack],
             active_player=self.active_player,
             phase=self.phase,
@@ -76,20 +78,26 @@ class GameState:
         return card.get_mana_output()
 
     def get_available_mana_by_color(self, player: int) -> Dict[str, int]:
-        """Get available mana by color for a player."""
+        """Get available mana by color for a player.
+
+        For dual lands that can produce multiple colors, each color is counted
+        separately (e.g., Volcanic Island counts as both 1 U and 1 R available).
+        This correctly represents that the land can produce either color.
+        """
         mana = {}
         for card in self.battlefield[player]:
             if hasattr(card, 'mana_produced') and card.mana_produced and not card.tapped:
                 # Creature lands (like Dryad Arbor) have summoning sickness
                 if hasattr(card, 'power') and getattr(card, 'entered_this_turn', False):
                     continue  # Can't tap creature for mana with summoning sickness
-                color = card.mana_produced
                 amount = self._get_mana_amount(card)
-                mana[color] = mana.get(color, 0) + amount
+                # Handle dual/multi-color lands - each color in mana_produced is available
+                for color in card.mana_produced:
+                    mana[color] = mana.get(color, 0) + amount
         for card in self.artifacts[player]:
             if hasattr(card, 'mana_produced') and card.mana_produced and not card.tapped:
-                color = card.mana_produced
-                mana[color] = mana.get(color, 0) + 1
+                for color in card.mana_produced:
+                    mana[color] = mana.get(color, 0) + 1
         return mana
 
     def pay_mana(self, player: int, color: str, amount: int) -> 'GameState':
@@ -97,16 +105,17 @@ class GameState:
         ns = self.copy()
         remaining = amount
 
-        # Collect all mana sources of the right color (battlefield and artifacts)
+        # Collect all mana sources that can produce the requested color
+        # For dual lands, check if the color is in mana_produced (e.g., 'R' in 'UR')
         mana_sources = []
         for card in ns.battlefield[player]:
-            if hasattr(card, 'mana_produced') and card.mana_produced == color and not card.tapped:
+            if hasattr(card, 'mana_produced') and card.mana_produced and color in card.mana_produced and not card.tapped:
                 # Skip creature lands with summoning sickness
                 if card.is_creature() and getattr(card, 'entered_this_turn', False):
                     continue
                 mana_sources.append(('battlefield', card))
         for card in ns.artifacts[player]:
-            if hasattr(card, 'mana_produced') and card.mana_produced == color and not card.tapped:
+            if hasattr(card, 'mana_produced') and card.mana_produced and color in card.mana_produced and not card.tapped:
                 mana_sources.append(('artifact', card))
 
         to_sacrifice = []
@@ -211,6 +220,9 @@ class GameState:
         p2_art = tuple(sorted(c.get_signature_state() for c in self.artifacts[1]))
         p1_ench = tuple(sorted(c.get_signature_state() for c in self.enchantments[0]))
         p2_ench = tuple(sorted(c.get_signature_state() for c in self.enchantments[1]))
+        # Exile zone for suspended cards
+        p1_exile = tuple(sorted(c.get_signature_state() for c in self.exile[0]))
+        p2_exile = tuple(sorted(c.get_signature_state() for c in self.exile[1]))
         # Include blocking assignments for combat phases
         blocking = tuple(sorted(self.blocking_assignments.items()))
         # Library sizes (not contents - order matters and would be too expensive)
@@ -225,6 +237,7 @@ class GameState:
             p1_bf, p2_bf,
             p1_art, p2_art,
             p1_ench, p2_ench,
+            p1_exile, p2_exile,
             blocking,
             lib_sizes,
             stack_sig
@@ -247,6 +260,8 @@ class GameState:
         p2_art = tuple(sorted(c.get_signature_state() for c in self.artifacts[1]))
         p1_ench = tuple(sorted(c.get_signature_state() for c in self.enchantments[0]))
         p2_ench = tuple(sorted(c.get_signature_state() for c in self.enchantments[1]))
+        p1_exile = tuple(sorted(c.get_signature_state() for c in self.exile[0]))
+        p2_exile = tuple(sorted(c.get_signature_state() for c in self.exile[1]))
         blocking = tuple(sorted(self.blocking_assignments.items()))
         lib_sizes = (len(self.library[0]), len(self.library[1]))
         stack_sig = tuple(c.get_signature_state() for c in self.stack)
@@ -257,6 +272,7 @@ class GameState:
             p1_bf, p2_bf,
             p1_art, p2_art,
             p1_ench, p2_ench,
+            p1_exile, p2_exile,
             blocking,
             lib_sizes,
             stack_sig

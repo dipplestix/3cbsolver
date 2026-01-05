@@ -33,7 +33,11 @@ class LuminarchAspirant(Creature):
         self.combat_trigger_used = False  # Track if we've used the trigger this turn
 
     def get_signature_state(self) -> tuple:
-        """Return aspirant-specific state including counters and trigger state."""
+        """Return aspirant-specific state including counters and trigger state.
+
+        Cap plus_counters at 30 for memoization to prevent infinite state growth
+        while preserving meaningful differences in combat outcomes.
+        """
         return (
             self.name,
             self.tapped,
@@ -41,7 +45,7 @@ class LuminarchAspirant(Creature):
             True,  # is_creature
             self.attacking,
             self.damage,
-            self.plus_counters,
+            min(self.plus_counters, 30),  # Cap at 30 for memoization
             self.combat_trigger_used,
         )
 
