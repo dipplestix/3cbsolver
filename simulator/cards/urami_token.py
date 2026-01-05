@@ -22,8 +22,8 @@ class UramiToken(Creature):
             owner=owner,
             power=5,
             toughness=5,
-            mana_cost=0,
-            mana_color='',
+            color_costs={},
+            generic_cost=0,
             keywords=['flying'],
             creature_types=['Demon', 'Spirit']
         )

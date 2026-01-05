@@ -29,9 +29,14 @@ from .heuristics import (
 from .phases import untap, upkeep, end_turn
 from .cards import (
     Card, Action, CardType,
-    Land, CreatureLand, Creature, Artifact, Enchantment,
+    Land, CreatureLand, DualLand, Creature, Artifact, Enchantment, SuspendCreature,
     create_island, create_forest, create_plains, create_swamp, create_mountain,
     create_hammerheim,
+    # Dual lands
+    create_underground_sea, create_volcanic_island, create_tundra,
+    create_tropical_island, create_savannah, create_scrubland,
+    create_badlands, create_taiga, create_plateau, create_bayou,
+    # Other cards
     create_mox_jet, create_mox_pearl, create_mutavault,
     CrystalVein, create_crystal_vein,
     SoldierToken, create_soldier_token,
@@ -55,6 +60,9 @@ from .cards import (
     SaprolingToken, create_saproling_token,
     Pendelhaven, create_pendelhaven,
     ShriekingAffliction, create_shrieking_affliction,
+    DurkwoodBaloth, create_durkwood_baloth,
+    KeldonHalberdier, create_keldon_halberdier,
+    Daze, create_daze,
 )
 
 __all__ = [
@@ -75,10 +83,15 @@ __all__ = [
     'end_turn', 'upkeep', 'untap',
     # Base classes
     'Card', 'Action', 'CardType',
-    'Land', 'CreatureLand', 'Creature', 'Artifact', 'Enchantment',
-    # Factory functions
+    'Land', 'CreatureLand', 'DualLand', 'Creature', 'Artifact', 'Enchantment', 'SuspendCreature',
+    # Factory functions - Basic lands
     'create_island', 'create_forest', 'create_plains', 'create_swamp', 'create_mountain',
     'create_hammerheim',
+    # Factory functions - Dual lands
+    'create_underground_sea', 'create_volcanic_island', 'create_tundra',
+    'create_tropical_island', 'create_savannah', 'create_scrubland',
+    'create_badlands', 'create_taiga', 'create_plateau', 'create_bayou',
+    # Factory functions - Other
     'create_mox_jet', 'create_mox_pearl', 'create_mutavault',
     'create_crystal_vein', 'create_soldier_token', 'create_soldier_military_program',
     'create_sleep_cursed_faerie', 'create_scythe_tiger',
@@ -90,6 +103,8 @@ __all__ = [
     'create_remote_farm', 'create_luminarch_aspirant',
     'create_thallid', 'create_saproling_token', 'create_pendelhaven',
     'create_shrieking_affliction',
+    'create_durkwood_baloth', 'create_keldon_halberdier',
+    'create_daze',
     # Card classes
     'Mountain', 'Hammerheim', 'SleepCursedFaerie', 'ScytheTiger',
     'UndiscoveredParadise', 'SazhsChocobo', 'StudentOfWarfare',
@@ -97,4 +112,5 @@ __all__ = [
     'HeartfireHero', 'BottomlessVault', 'TombOfUrami', 'UramiToken',
     'RemoteFarm', 'LuminarchAspirant', 'Thallid', 'SaprolingToken', 'Pendelhaven',
     'ShriekingAffliction', 'CrystalVein', 'SoldierToken', 'SoldierMilitaryProgram',
+    'DurkwoodBaloth', 'KeldonHalberdier', 'Daze',
 ]

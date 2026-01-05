@@ -10,10 +10,26 @@ def upkeep(state: 'GameState') -> 'GameState':
     """Handle upkeep step for the active player.
 
     This phase handles:
+    - Suspend time counter removal (cards in exile)
     - Upkeep triggers (e.g., Sleep-Cursed Faerie's ward payment)
     - Auto-leveling creatures (e.g., Student of Warfare)
     """
     ns = state.copy()
+
+    # Handle suspended cards in exile - remove time counter
+    cards_to_enter = []
+    for card in ns.exile[ns.active_player]:
+        if hasattr(card, 'time_counters') and card.time_counters > 0:
+            card.time_counters -= 1
+            if card.time_counters == 0:
+                cards_to_enter.append(card)
+
+    # Move cards with 0 time counters to battlefield with haste
+    for card in cards_to_enter:
+        ns.exile[ns.active_player].remove(card)
+        card.is_suspended = False
+        card.entered_this_turn = False  # Has haste!
+        ns.battlefield[ns.active_player].append(card)
 
     # Handle upkeep triggers for active player's cards
     for card in ns.battlefield[ns.active_player]:

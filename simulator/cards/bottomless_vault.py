@@ -51,11 +51,15 @@ class BottomlessVault(Land):
         return mana
 
     def get_signature_state(self) -> tuple:
-        """Return vault-specific state including storage counters and stay_tapped flag."""
+        """Return vault-specific state including storage counters and stay_tapped flag.
+
+        Cap storage_counters at 5 for memoization (5 is enough to activate Urami).
+        States with 5+ counters are functionally equivalent.
+        """
         return (
             self.name,
             self.tapped,
-            self.storage_counters,
+            min(self.storage_counters, 5),  # Cap at 5 for memoization
             self.stay_tapped,
         )
 

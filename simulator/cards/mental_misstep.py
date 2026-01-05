@@ -1,7 +1,7 @@
 """Mental Misstep implementation."""
-from typing import List, TYPE_CHECKING
+from typing import List, Optional, TYPE_CHECKING
 
-from .base import Action
+from .base import Action, Card
 from .instant import Instant
 
 if TYPE_CHECKING:
@@ -23,19 +23,23 @@ class MentalMisstep(Instant):
             color_costs={},  # Phyrexian mana handled separately
             generic_cost=0
         )
+        self.target_spell_name: Optional[str] = None  # Name of spell we're targeting
 
     def get_mana_value(self) -> int:
         """Mental Misstep has MV 1 (the Phyrexian mana counts)."""
         return 1
 
+    def get_valid_targets(self, state: 'GameState') -> List[Card]:
+        """Get all spells on the stack with MV 1 that we can counter."""
+        targets = []
+        for spell in state.stack:
+            if spell.get_mana_value() == 1:
+                targets.append(spell)
+        return targets
+
     def has_valid_target(self, state: 'GameState') -> bool:
         """Check if there's a spell with MV 1 on the stack to counter."""
-        if not state.stack:
-            return False
-        # Check if any spell on stack has MV 1
-        # We can only counter the top spell in our simplified model
-        top_spell = state.stack[-1]
-        return top_spell.get_mana_value() == 1
+        return len(self.get_valid_targets(state)) > 0
 
     def can_pay_with_mana(self, state: 'GameState') -> bool:
         """Check if we can pay with blue mana."""
@@ -48,12 +52,17 @@ class MentalMisstep(Instant):
 
     def get_response_actions(self, state: 'GameState') -> List[Action]:
         """Get actions to counter a spell on the stack."""
-        # Must be in response phase and be the responding player
+        # Must be in response phase
         if state.phase != "response":
             return []
 
-        # The responding player is the non-active player
-        if self.owner == state.active_player:
+        # Must have something on the stack
+        if not state.stack:
+            return []
+
+        # The responding player is the opponent of whoever owns the top spell
+        top_spell_owner = state.stack[-1].owner
+        if self.owner == top_spell_owner:
             return []
 
         # Must have valid target
@@ -61,69 +70,85 @@ class MentalMisstep(Instant):
             return []
 
         actions = []
+        targets = self.get_valid_targets(state)
+        misstep_name = self.name
+        misstep_owner = self.owner
 
-        # Option 1: Pay with blue mana
-        if self.can_pay_with_mana(state):
-            def cast_with_mana(s: 'GameState') -> 'GameState':
-                ns = s.copy()
-                # Pay U
-                ns = ns.pay_mana(self.owner, 'U', 1)
-                # Remove from hand
-                for i, card in enumerate(ns.hands[self.owner]):
-                    if card.name == self.name:
-                        misstep = ns.hands[self.owner].pop(i)
-                        break
-                # Counter top spell (remove from stack, put in graveyard)
-                countered = ns.stack.pop()
-                ns.graveyard[countered.owner].append(countered)
-                # Put Mental Misstep in graveyard
-                ns.graveyard[self.owner].append(misstep)
-                return ns
+        for target in targets:
+            target_name = target.name
 
-            actions.append(Action(
-                f"Counter with Mental Misstep (pay U)",
-                cast_with_mana
-            ))
+            # Option 1: Pay with blue mana
+            if self.can_pay_with_mana(state):
+                def make_cast_with_mana(tgt_name):
+                    def cast_with_mana(s: 'GameState') -> 'GameState':
+                        ns = s.copy()
+                        # Pay U
+                        ns = ns.pay_mana(misstep_owner, 'U', 1)
+                        # Remove from hand and put on stack
+                        for i, card in enumerate(ns.hands[misstep_owner]):
+                            if card.name == misstep_name:
+                                misstep = ns.hands[misstep_owner].pop(i)
+                                misstep.target_spell_name = tgt_name
+                                ns.stack.append(misstep)
+                                break
+                        # Stay in response phase - opponent can respond to this
+                        return ns
+                    return cast_with_mana
 
-        # Option 2: Pay with 2 life
-        if self.can_pay_with_life(state):
-            def cast_with_life(s: 'GameState') -> 'GameState':
-                ns = s.copy()
-                # Pay 2 life
-                ns.life[self.owner] -= 2
-                # Check for death
-                if ns.life[self.owner] <= 0:
-                    ns.game_over = True
-                    ns.winner = 1 - self.owner
-                    return ns
-                # Remove from hand
-                for i, card in enumerate(ns.hands[self.owner]):
-                    if card.name == self.name:
-                        misstep = ns.hands[self.owner].pop(i)
-                        break
-                # Counter top spell
-                countered = ns.stack.pop()
-                ns.graveyard[countered.owner].append(countered)
-                # Put Mental Misstep in graveyard
-                ns.graveyard[self.owner].append(misstep)
-                return ns
+                actions.append(Action(
+                    f"Cast Mental Misstep (pay U) targeting {target_name}",
+                    make_cast_with_mana(target_name)
+                ))
 
-            actions.append(Action(
-                f"Counter with Mental Misstep (pay 2 life)",
-                cast_with_life
-            ))
+            # Option 2: Pay with 2 life
+            if self.can_pay_with_life(state):
+                def make_cast_with_life(tgt_name):
+                    def cast_with_life(s: 'GameState') -> 'GameState':
+                        ns = s.copy()
+                        # Pay 2 life
+                        ns.life[misstep_owner] -= 2
+                        # Check for death
+                        if ns.life[misstep_owner] <= 0:
+                            ns.game_over = True
+                            ns.winner = 1 - misstep_owner
+                            return ns
+                        # Remove from hand and put on stack
+                        for i, card in enumerate(ns.hands[misstep_owner]):
+                            if card.name == misstep_name:
+                                misstep = ns.hands[misstep_owner].pop(i)
+                                misstep.target_spell_name = tgt_name
+                                ns.stack.append(misstep)
+                                break
+                        # Stay in response phase - opponent can respond to this
+                        return ns
+                    return cast_with_life
+
+                actions.append(Action(
+                    f"Cast Mental Misstep (pay 2 life) targeting {target_name}",
+                    make_cast_with_life(target_name)
+                ))
 
         return actions
 
     def resolve(self, state: 'GameState') -> 'GameState':
-        """Mental Misstep resolves immediately when cast (counter effect).
+        """Counter the targeted spell if it's still on the stack."""
+        ns = state.copy()
+        if self.target_spell_name:
+            # Find and counter the target spell
+            for i, spell in enumerate(ns.stack):
+                if spell.name == self.target_spell_name:
+                    countered = ns.stack.pop(i)
+                    ns.graveyard[countered.owner].append(countered)
+                    break
+        return ns
 
-        This is handled in get_response_actions, so this is a no-op.
-        """
-        return state
+    def get_signature_state(self) -> tuple:
+        """Include target in signature for proper memoization."""
+        return (self.name, self.target_spell_name)
 
     def copy(self) -> 'MentalMisstep':
         """Create a deep copy."""
         new_card = MentalMisstep(self.owner)
         new_card.tapped = self.tapped
+        new_card.target_spell_name = self.target_spell_name
         return new_card
